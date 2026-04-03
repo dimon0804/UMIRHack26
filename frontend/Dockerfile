@@ -1,7 +1,10 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json ./
-RUN npm install
+# legacy-peer-deps: стабильная установка при расхождении peer (Next/React ecosystem)
+RUN npm config set fetch-retries 5 \
+  && npm config set fetch-retry-maxtimeout 120000 \
+  && npm install --legacy-peer-deps --no-audit --no-fund
 
 FROM node:20-alpine AS builder
 WORKDIR /app
