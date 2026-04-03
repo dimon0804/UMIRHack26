@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { HeaderBar } from "@/components/header-bar";
+import { SimulatorPanel } from "@/components/simulator-panel";
 import { useLocale } from "@/components/providers";
 import { apiUrl, getJson, postJson, type TokenPair } from "@/lib/api";
 
@@ -88,11 +89,13 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
       <HeaderBar />
-      <main className="mx-auto flex max-w-lg flex-col gap-8 px-6 py-12">
+      <main className="mx-auto flex max-w-2xl flex-col gap-8 px-6 py-12">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-ink">{t("title")}</h1>
           <p className="mt-2 text-sm text-ink-muted">{t("subtitle")}</p>
         </div>
+
+        <SimulatorPanel />
 
         <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-panel dark:border-slate-800 dark:bg-slate-950 dark:shadow-panel-dark">
           {me ? (
