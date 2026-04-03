@@ -61,7 +61,7 @@ git push -u origin feature/simulation-scenarios
 
 ## Безопасность
 
-- Пароли: **bcrypt** (passlib).
+- Пароли: **bcrypt** (passlib). В образе зафиксирован `bcrypt==4.0.1` из‑за совместимости с `passlib` на Python 3.12.
 - JWT: access (короткий TTL) + refresh (хранится хэш в БД, ротация при refresh).
 - В продакшене: сильный `JWT_SECRET`, TLS на reverse proxy, ограничение CORS, секреты из vault/Kubernetes Secrets.
 
