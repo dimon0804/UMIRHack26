@@ -1,15 +1,82 @@
-"""Сценарии тренажёра: список, контент, проверка выбора (без БД)."""
+"""Сценарии тренажёра: две вкладки (почта, чат); контент — Mistral через ai-service, иначе запасной хардкод."""
 
 from __future__ import annotations
 
+import random
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from app.services.scenario_llm_client import fetch_llm_scenario
+
 router = APIRouter(prefix="/scenarios", tags=["simulator"])
 
 Locale = Literal["ru", "en"]
+
+# Одна вкладка в UI; submit идёт на эти id
+AGGREGATE_MAIL_ID = "phishing-mail"
+AGGREGATE_CHAT_ID = "se-chat"
+
+# Старый алиас мессенджера → общая вкладка «чат»
+SCENARIO_ALIASES: dict[str, str] = {
+    "se-telegram": AGGREGATE_CHAT_ID,
+}
+
+MAIL_SCENARIO_IDS: tuple[str, ...] = (
+    "phishing-mail-bank",
+    "phishing-mail-parcel",
+    "phishing-mail-payroll",
+)
+
+CHAT_SCENARIO_IDS: tuple[str, ...] = (
+    "se-chat-gifts",
+    "se-chat-wire",
+    "se-chat-it",
+)
+
+
+def _canonical_id(scenario_id: str) -> str:
+    return SCENARIO_ALIASES.get(scenario_id, scenario_id)
+
+
+async def _scenario_for_get(scenario_id: str, locale: Locale) -> dict | None:
+    """GET: для вкладок почта/чат — сначала Mistral; иначе случайный заранее прописанный вариант."""
+    sid = _canonical_id(scenario_id)
+
+    if sid == AGGREGATE_MAIL_ID:
+        llm = await fetch_llm_scenario(
+            aggregate_id=AGGREGATE_MAIL_ID,
+            scenario_type="email",
+            locale=locale,
+        )
+        if llm:
+            return llm
+        pick = random.choice(MAIL_SCENARIO_IDS)
+        base = _scenario_by_id(pick, locale)
+        if not base:
+            return None
+        out = dict(base)
+        out["id"] = AGGREGATE_MAIL_ID
+        return out
+
+    if sid == AGGREGATE_CHAT_ID:
+        llm = await fetch_llm_scenario(
+            aggregate_id=AGGREGATE_CHAT_ID,
+            scenario_type="chat",
+            locale=locale,
+        )
+        if llm:
+            return llm
+        pick = random.choice(CHAT_SCENARIO_IDS)
+        base = _scenario_by_id(pick, locale)
+        if not base:
+            return None
+        out = dict(base)
+        out["id"] = AGGREGATE_CHAT_ID
+        return out
+
+    return _scenario_by_id(sid, locale)
 
 
 class ChoiceOutcome(BaseModel):
@@ -35,8 +102,8 @@ def _outcomes_mail(locale: Locale) -> dict[str, ChoiceOutcome]:
                 xp_delta=-20,
                 teach_title="Phishing link",
                 teach_body=(
-                    "Legitimate banks rarely ask you to 'verify urgently' via an external link. "
-                    "The domain may look similar (typosquatting). Always open the app or type the bank URL yourself."
+                    "Legitimate services rarely demand urgent verification via an odd external link. "
+                    "Domains may use typosquatting. Open the official app or type the URL yourself."
                 ),
                 show_consequences=True,
                 consequence_steps=[
@@ -67,8 +134,8 @@ def _outcomes_mail(locale: Locale) -> dict[str, ChoiceOutcome]:
                 xp_delta=15,
                 teach_title="Check the real sender",
                 teach_body=(
-                    "Inspect the full address and reply-to, SPF/DMARC hints, and whether the tone matches real notices. "
-                    "When in doubt, call the bank via the number on your card — not from the email."
+                    "Inspect the full address, reply-to, and tone. When in doubt, call the organization "
+                    "via a number you already trust — not from the message."
                 ),
                 show_consequences=False,
                 consequence_steps=[],
@@ -96,14 +163,14 @@ def _outcomes_mail(locale: Locale) -> dict[str, ChoiceOutcome]:
             xp_delta=-20,
             teach_title="Фишинговая ссылка",
             teach_body=(
-                "Банки редко просят «срочно подтвердить» по внешней ссылке. Домен может быть похож на настоящий "
-                "(опечатка, другая зона). Открывайте только приложение банка или введите адрес сайта вручную."
+                "Службы редко требуют «срочно» перейти по подозрительной ссылке. Домен может отличаться "
+                "на одну букву. Открывайте официальное приложение или вводите адрес сайта вручную."
             ),
             show_consequences=True,
             consequence_steps=[
                 {"title": "Сессия перехвачена", "detail": "Поддельная страница украла логин и пароль."},
-                {"title": "Списание средств", "detail": "Мошенники инициировали переводы с вашего счёта."},
-                {"title": "Утечка данных", "detail": "Контакты и выписки могли быть скачаны."},
+                {"title": "Списание средств", "detail": "Мошенники инициировали переводы."},
+                {"title": "Утечка данных", "detail": "Контакты и документы могли быть скачаны."},
             ],
         ),
         "delete_only": ChoiceOutcome(
@@ -114,8 +181,8 @@ def _outcomes_mail(locale: Locale) -> dict[str, ChoiceOutcome]:
             xp_delta=6,
             teach_title="Лучше, чем кликнуть",
             teach_body=(
-                "Удаление снижает риск для вас, но репорт помогает защитить коллег. "
-                "Если в компании есть кнопка «Сообщить о фишинге» или почта SOC — используйте её."
+                "Удаление снижает риск для вас, но репорт помогает коллегам. "
+                "Используйте кнопку «Сообщить о фишинге» или SOC, если есть."
             ),
             show_consequences=False,
             consequence_steps=[],
@@ -128,8 +195,8 @@ def _outcomes_mail(locale: Locale) -> dict[str, ChoiceOutcome]:
             xp_delta=15,
             teach_title="Проверьте отправителя",
             teach_body=(
-                "Смотрите полный адрес, Reply-To, совпадение тона с реальными уведомлениями. "
-                "При сомнении звоните в банк по номеру с карты — не из письма."
+                "Адрес, Reply-To, тон письма. При сомнении звоните в организацию по номеру из контактов, "
+                "которым вы уже доверяете — не из письма."
             ),
             show_consequences=False,
             consequence_steps=[],
@@ -142,7 +209,7 @@ def _outcomes_mail(locale: Locale) -> dict[str, ChoiceOutcome]:
             xp_delta=20,
             teach_title="Лучшая практика",
             teach_body=(
-                "Репорт обучает фильтры и SOC. Вместе с проверкой отправителя это максимально снижает риск."
+                "Репорт обучает фильтры и SOC. Вместе с проверкой отправителя это сильнее всего снижает риск."
             ),
             show_consequences=False,
             consequence_steps=[],
@@ -159,16 +226,16 @@ def _outcomes_chat(locale: Locale) -> dict[str, ChoiceOutcome]:
                 severity="critical",
                 security_delta=-40,
                 xp_delta=-25,
-                teach_title="Gift-card pressure",
+                teach_title="Urgent request in chat",
                 teach_body=(
-                    "Urgent 'boss' requests for gift cards or transfers are a classic BEC pattern. "
-                    "Verify through a second channel you already trust (phone/video)."
+                    "Urgent money, codes, passwords or 'do it now' from a manager in DM is a classic BEC / "
+                    "impersonation pattern. Verify through a second channel you trust (known phone number)."
                 ),
                 show_consequences=True,
                 consequence_steps=[
-                    {"title": "Account takeover", "detail": "SIM swap or reused password gave access to your work chat."},
-                    {"title": "Funds lost", "detail": "Gift cards were cashed out; chargeback is unlikely."},
-                    {"title": "Data leak", "detail": "Attackers harvested files you shared while trusting the thread."},
+                    {"title": "Account takeover", "detail": "Weak or reused credentials gave access to the account."},
+                    {"title": "Funds lost", "detail": "Transfers or cards were cashed out; recovery is hard."},
+                    {"title": "Data leak", "detail": "Attackers used trust to extract files and messages."},
                 ],
             ),
             "callback": ChoiceOutcome(
@@ -179,8 +246,7 @@ def _outcomes_chat(locale: Locale) -> dict[str, ChoiceOutcome]:
                 xp_delta=18,
                 teach_title="Out-of-band verification",
                 teach_body=(
-                    "Calling your manager on a known number breaks the attack chain. "
-                    "If they confirm, you can proceed safely."
+                    "Calling the person on a known number breaks the attack chain. If they confirm, proceed via official process."
                 ),
                 show_consequences=False,
                 consequence_steps=[],
@@ -193,7 +259,7 @@ def _outcomes_chat(locale: Locale) -> dict[str, ChoiceOutcome]:
                 xp_delta=14,
                 teach_title="Use official workflows",
                 teach_body=(
-                    "Corporate finance requests should go through ticket systems or approved tools — not random DMs."
+                    "Finance, IT and HR requests should go through tickets or approved tools — not random DMs."
                 ),
                 show_consequences=False,
                 consequence_steps=[],
@@ -206,7 +272,7 @@ def _outcomes_chat(locale: Locale) -> dict[str, ChoiceOutcome]:
                 xp_delta=8,
                 teach_title="Do nothing harmful",
                 teach_body=(
-                    "Ignoring avoids immediate damage, but a quick heads-up to IT/Security helps others who might fall for it."
+                    "Ignoring avoids immediate damage, but a quick heads-up to IT/Security helps others."
                 ),
                 show_consequences=False,
                 consequence_steps=[],
@@ -219,16 +285,16 @@ def _outcomes_chat(locale: Locale) -> dict[str, ChoiceOutcome]:
             severity="critical",
             security_delta=-40,
             xp_delta=-25,
-            teach_title="Давление и «подарочные карты»",
+            teach_title="Срочная просьба в чате",
             teach_body=(
-                "Срочные просьбы «руководителя» купить карты или перевести деньги — типичный сценарий BEC. "
-                "Проверьте вторым каналом, которому вы уже доверяете (звонок/видео на известный номер)."
+                "Деньги, коды, пароли или «сделай сейчас» от «руководителя» в личке — типичный BEC/подмена. "
+                "Проверьте вторым каналом (звонок на известный номер)."
             ),
             show_consequences=True,
             consequence_steps=[
-                {"title": "Взлом аккаунта", "detail": "SIM-подмена или пароль дали доступ к рабочему чату."},
-                {"title": "Потеря денег", "detail": "Карты обналичены, возврат маловероятен."},
-                {"title": "Утечка данных", "detail": "Пока вы доверяли чату, могли украсть файлы и переписку."},
+                {"title": "Взлом или подмена", "detail": "Слабый пароль или сессия дали доступ к аккаунту."},
+                {"title": "Потеря денег", "detail": "Перевод или карты обналичены, возврат сложен."},
+                {"title": "Утечка", "detail": "Под доверие вытянули файлы и переписку."},
             ],
         ),
         "callback": ChoiceOutcome(
@@ -239,7 +305,7 @@ def _outcomes_chat(locale: Locale) -> dict[str, ChoiceOutcome]:
             xp_delta=18,
             teach_title="Проверка вне чата",
             teach_body=(
-                "Звонок руководителю на известный номер разрывает цепочку атаки. Если подтвердят — можно действовать."
+                "Звонок человеку на известный номер разрывает цепочку. Если подтвердят — действуйте по официальному процессу."
             ),
             show_consequences=False,
             consequence_steps=[],
@@ -250,9 +316,9 @@ def _outcomes_chat(locale: Locale) -> dict[str, ChoiceOutcome]:
             severity="none",
             security_delta=18,
             xp_delta=14,
-            teach_title="Официальные процессы",
+            teach_title="Официальные каналы",
             teach_body=(
-                "Финансовые запросы в компании должны идти через тикеты или утверждённые инструменты — не из личных DM."
+                "Финансы, IT и HR — через тикеты и утверждённые системы, не через случайные DM."
             ),
             show_consequences=False,
             consequence_steps=[],
@@ -273,102 +339,306 @@ def _outcomes_chat(locale: Locale) -> dict[str, ChoiceOutcome]:
     }
 
 
-def _scenario_mail(locale: Locale) -> dict:
+def _choices_mail(locale: Locale) -> list[dict[str, str]]:
     if locale == "en":
+        return [
+            {"id": "open_link", "label": "Open the link"},
+            {"id": "delete_only", "label": "Delete email"},
+            {"id": "verify_sender", "label": "Check sender details"},
+            {"id": "report", "label": "Report phishing"},
+        ]
+    return [
+        {"id": "open_link", "label": "Открыть ссылку"},
+        {"id": "delete_only", "label": "Удалить письмо"},
+        {"id": "verify_sender", "label": "Проверить отправителя"},
+        {"id": "report", "label": "Сообщить о фишинге"},
+    ]
+
+
+def _choices_chat_gifts(locale: Locale) -> list[dict[str, str]]:
+    if locale == "en":
+        return [
+            {"id": "send_codes", "label": "Send the codes now"},
+            {"id": "callback", "label": "Call back on a known number"},
+            {"id": "official_channel", "label": "Ask to use official procurement"},
+            {"id": "ignore", "label": "Ignore for now"},
+        ]
+    return [
+        {"id": "send_codes", "label": "Отправить коды сейчас"},
+        {"id": "callback", "label": "Перезвонить на известный номер"},
+        {"id": "official_channel", "label": "Попросить оформить через закупки"},
+        {"id": "ignore", "label": "Пока не отвечать"},
+    ]
+
+
+def _choices_chat_wire(locale: Locale) -> list[dict[str, str]]:
+    if locale == "en":
+        return [
+            {"id": "send_codes", "label": "Wire the money now"},
+            {"id": "callback", "label": "Call finance / manager on a known line"},
+            {"id": "official_channel", "label": "Open a ticket in the banking portal"},
+            {"id": "ignore", "label": "Ignore until verified"},
+        ]
+    return [
+        {"id": "send_codes", "label": "Срочно перевести по реквизитам"},
+        {"id": "callback", "label": "Позвонить в финансы / руководителю"},
+        {"id": "official_channel", "label": "Оформить через корпоративный портал / тикет"},
+        {"id": "ignore", "label": "Не реагировать до проверки"},
+    ]
+
+
+def _choices_chat_it(locale: Locale) -> list[dict[str, str]]:
+    if locale == "en":
+        return [
+            {"id": "send_codes", "label": "Send my password here"},
+            {"id": "callback", "label": "Call IT on the internal directory number"},
+            {"id": "official_channel", "label": "Open a ticket in the service desk"},
+            {"id": "ignore", "label": "Ignore — IT never asks for passwords"},
+        ]
+    return [
+        {"id": "send_codes", "label": "Написать пароль в чат"},
+        {"id": "callback", "label": "Позвонить в IT по внутреннему номеру"},
+        {"id": "official_channel", "label": "Создать тикет в service desk"},
+        {"id": "ignore", "label": "Игнор — IT не просит пароли в чате"},
+    ]
+
+
+def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
+    sid = _canonical_id(scenario_id)
+
+    if sid == "phishing-mail-bank":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "email",
+                "title": "Urgent: security verification",
+                "sender_display": "SecureBank Alerts",
+                "sender_email": "alerts@securebank-updates.net",
+                "subject": "Action required: confirm your device within 24 hours",
+                "preview": "Dear customer, we detected unusual login activity...",
+                "body_paragraphs": [
+                    "We detected a login to your online banking from an unrecognized device in Tallinn, Estonia.",
+                    "If this was not you, you must verify your identity immediately to prevent a hold on outgoing transfers.",
+                    "Use the secure link below — it expires in 24 hours.",
+                ],
+                "cta_label": "Verify my device",
+                "cta_href_display": "https://securebank-updates.net/verify?session=7f3a…",
+                "choices": _choices_mail(locale),
+            }
         return {
-            "id": "phishing-mail",
+            "id": sid,
             "type": "email",
-            "title": "Urgent: security verification",
-            "sender_display": "SecureBank Alerts",
+            "title": "Срочно: проверка безопасности",
+            "sender_display": "SecureBank Уведомления",
             "sender_email": "alerts@securebank-updates.net",
-            "subject": "Action required: confirm your device within 24 hours",
-            "preview": "Dear customer, we detected unusual login activity...",
+            "subject": "Требуется действие: подтвердите устройство в течение 24 часов",
+            "preview": "Уважаемый клиент, зафиксирован необычный вход...",
             "body_paragraphs": [
-                "We detected a login to your online banking from an unrecognized device in Tallinn, Estonia.",
-                "If this was not you, you must verify your identity immediately to prevent a hold on outgoing transfers.",
-                "Use the secure link below — it expires in 24 hours.",
+                "Мы зафиксировали вход в интернет-банк с незнакомого устройства (Таллин, Эстония).",
+                "Если это были не вы, необходимо срочно подтвердить личность, иначе будут ограничены исходящие переводы.",
+                "Используйте защищённую ссылку ниже — она действует 24 часа.",
             ],
-            "cta_label": "Verify my device",
+            "cta_label": "Подтвердить устройство",
             "cta_href_display": "https://securebank-updates.net/verify?session=7f3a…",
-            "choices": [
-                {"id": "open_link", "label": "Open the link"},
-                {"id": "delete_only", "label": "Delete email"},
-                {"id": "verify_sender", "label": "Check sender details"},
-                {"id": "report", "label": "Report phishing"},
-            ],
+            "choices": _choices_mail(locale),
         }
-    return {
-        "id": "phishing-mail",
-        "type": "email",
-        "title": "Срочно: проверка безопасности",
-        "sender_display": "SecureBank Уведомления",
-        "sender_email": "alerts@securebank-updates.net",
-        "subject": "Требуется действие: подтвердите устройство в течение 24 часов",
-        "preview": "Уважаемый клиент, зафиксирован необычный вход...",
-        "body_paragraphs": [
-            "Мы зафиксировали вход в интернет-банк с незнакомого устройства (Таллин, Эстония).",
-            "Если это были не вы, необходимо срочно подтвердить личность, иначе будут ограничены исходящие переводы.",
-            "Используйте защищённую ссылку ниже — она действует 24 часа.",
-        ],
-        "cta_label": "Подтвердить устройство",
-        "cta_href_display": "https://securebank-updates.net/verify?session=7f3a…",
-        "choices": [
-            {"id": "open_link", "label": "Открыть ссылку"},
-            {"id": "delete_only", "label": "Удалить письмо"},
-            {"id": "verify_sender", "label": "Проверить отправителя"},
-            {"id": "report", "label": "Сообщить о фишинге"},
-        ],
-    }
 
-
-def _scenario_chat(locale: Locale) -> dict:
-    if locale == "en":
+    if sid == "phishing-mail-parcel":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "email",
+                "title": "Your parcel is on hold — customs fee",
+                "sender_display": "GlobalPost Tracking",
+                "sender_email": "noreply@globalpost-track.support",
+                "subject": "Shipment #GP-88421: pay €2.40 to release",
+                "preview": "We could not deliver your package. Pay online to reschedule...",
+                "body_paragraphs": [
+                    "Your parcel is waiting at the sorting center. A customs processing fee of €2.40 must be paid within 48 hours.",
+                    "After payment you can choose a new delivery window. Unpaid parcels are returned to sender.",
+                    "Use the link below — you will need your phone number and card for verification only.",
+                ],
+                "cta_label": "Pay fee & track parcel",
+                "cta_href_display": "https://globalpost-track.support/pay?id=GP88421…",
+                "choices": _choices_mail(locale),
+            }
         return {
-            "id": "se-telegram",
+            "id": sid,
+            "type": "email",
+            "title": "Посылка задержана — таможенный сбор",
+            "sender_display": "Служба доставки GlobalPost",
+            "sender_email": "noreply@globalpost-track.support",
+            "subject": "Отправление №GP-88421: оплатите 199 ₽ для выдачи",
+            "preview": "Не удалось вручить посылку. Оплатите онлайн для повторной доставки...",
+            "body_paragraphs": [
+                "Ваша посылка ожидает на сортировочном центре. Необходимо оплатить оформление таможенного платежа 199 ₽ в течение 48 часов.",
+                "После оплаты вы сможете выбрать удобное окно доставки. Неоплаченные отправления возвращаются отправителю.",
+                "Перейдите по ссылке — потребуется только номер телефона и карта для «проверки».",
+            ],
+            "cta_label": "Оплатить и отследить",
+            "cta_href_display": "https://globalpost-track.support/pay?id=GP88421…",
+            "choices": _choices_mail(locale),
+        }
+
+    if sid == "phishing-mail-payroll":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "email",
+                "title": "Payroll update — confirm by Friday",
+                "sender_display": "HR Portal",
+                "sender_email": "hr-notifications@company-hrportal.io",
+                "subject": "Action: verify bank details for March payroll",
+                "preview": "Dear employee, our payroll partner requires confirmation...",
+                "body_paragraphs": [
+                    "To comply with new banking rules, please confirm the account we use for salary transfers.",
+                    "If you do not confirm by Friday 18:00, your March payment may be delayed.",
+                    "This is a one-time secure form — it takes under two minutes.",
+                ],
+                "cta_label": "Confirm payroll details",
+                "cta_href_display": "https://company-hrportal.io/payroll/verify?token=…",
+                "choices": _choices_mail(locale),
+            }
+        return {
+            "id": sid,
+            "type": "email",
+            "title": "Обновление зарплатных реквизитов",
+            "sender_display": "Кадры — корпоративный портал",
+            "sender_email": "hr-notifications@company-hrportal.io",
+            "subject": "Требуется подтвердить реквизиты для выплаты за март",
+            "preview": "Уважаемый сотрудник, партнёр по выплатам просит подтверждение...",
+            "body_paragraphs": [
+                "В связи с обновлением требований банка просим подтвердить счёт, на который начисляется зарплата.",
+                "Если не подтвердить до пятницы 18:00, выплата за март может быть задержана.",
+                "Это разовая защищённая форма — займёт меньше двух минут.",
+            ],
+            "cta_label": "Подтвердить реквизиты",
+            "cta_href_display": "https://company-hrportal.io/payroll/verify?token=…",
+            "choices": _choices_mail(locale),
+        }
+
+    if sid == "se-chat-gifts":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "chat",
+                "title": "Work chat — gift cards",
+                "peer_name": "Alex — Director",
+                "peer_handle": "alex_director_office",
+                "messages": [
+                    {
+                        "from": "peer",
+                        "text": (
+                            "Hey, I'm in back-to-back meetings. Need a quick favor — buy 4x $500 Apple gift cards "
+                            "for a client incentive. Send codes here, I'll reimburse today. URGENT, don't tell finance yet."
+                        ),
+                        "time": "14:02",
+                    }
+                ],
+                "choices": _choices_chat_gifts(locale),
+            }
+        return {
+            "id": sid,
             "type": "chat",
-            "title": "Work chat",
-            "peer_name": "Alex — Director",
+            "title": "Рабочий чат — подарочные карты",
+            "peer_name": "Алексей — директор",
             "peer_handle": "alex_director_office",
             "messages": [
                 {
                     "from": "peer",
                     "text": (
-                        "Hey, I'm in back-to-back meetings. Need a quick favor — buy 4x $500 Apple gift cards "
-                        "for a client incentive. Send codes here, I'll reimburse today. URGENT, don't tell finance yet."
+                        "Привет, сижу на беспрерывных созвонах. Нужна срочная помощь — купи 4 подарочные карты Apple "
+                        "по $500 для клиентского поощрения. Коды пришли сюда, сегодня компенсирую. СРОЧНО, финотделу пока не говори."
                     ),
                     "time": "14:02",
                 }
             ],
-            "choices": [
-                {"id": "send_codes", "label": "Send the codes now"},
-                {"id": "callback", "label": "Call back on a known number"},
-                {"id": "official_channel", "label": "Ask to use official procurement"},
-                {"id": "ignore", "label": "Ignore for now"},
-            ],
+            "choices": _choices_chat_gifts(locale),
         }
-    return {
-        "id": "se-telegram",
-        "type": "chat",
-        "title": "Рабочий чат",
-        "peer_name": "Алексей — директор",
-        "peer_handle": "alex_director_office",
-        "messages": [
-            {
-                "from": "peer",
-                "text": (
-                    "Привет, сижу на беспрерывных созвонах. Нужна срочная помощь — купи 4 подарочные карты Apple "
-                    "по $500 для клиентского поощрения. Коды пришли сюда, сегодня компенсирую. СРОЧНО, финотделу пока не говори."
-                ),
-                "time": "14:02",
+
+    if sid == "se-chat-wire":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "chat",
+                "title": "Work chat — urgent transfer",
+                "peer_name": "Maria — CFO",
+                "peer_handle": "maria_cfo_exec",
+                "messages": [
+                    {
+                        "from": "peer",
+                        "text": (
+                            "Hi — I'm on a plane with bad VPN. We must pay vendor invoice #V-9921 today or we lose "
+                            "the discount. Wire to the account in the PDF I emailed; send me the confirmation screenshot here. "
+                            "Do not loop legal, they're in hearings."
+                        ),
+                        "time": "09:41",
+                    }
+                ],
+                "choices": _choices_chat_wire(locale),
             }
-        ],
-        "choices": [
-            {"id": "send_codes", "label": "Отправить коды сейчас"},
-            {"id": "callback", "label": "Перезвонить на известный номер"},
-            {"id": "official_channel", "label": "Попросить оформить через закупки"},
-            {"id": "ignore", "label": "Пока не отвечать"},
-        ],
-    }
+        return {
+            "id": sid,
+            "type": "chat",
+            "title": "Рабочий чат — срочный перевод",
+            "peer_name": "Мария — финансовый директор",
+            "peer_handle": "maria_cfo_exec",
+            "messages": [
+                {
+                    "from": "peer",
+                    "text": (
+                        "Привет, я в самолёте, VPN отваливается. Нужно сегодня оплатить счёт контрагенту №V-9921, "
+                        "иначе сгорит скидка. Реквизиты в PDF, который кинула на почту — переведи и пришли скрин подтверждения сюда. "
+                        "Юристов не подключай, у них слушания."
+                    ),
+                    "time": "09:41",
+                }
+            ],
+            "choices": _choices_chat_wire(locale),
+        }
+
+    if sid == "se-chat-it":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "chat",
+                "title": "Work chat — IT support",
+                "peer_name": "IT Helpdesk",
+                "peer_handle": "it_support_urgent01",
+                "messages": [
+                    {
+                        "from": "peer",
+                        "text": (
+                            "Hello, this is IT. We are migrating mail servers tonight. Reply with your corporate password "
+                            "so we can sync your mailbox — do not use the ticket system, it's overloaded. "
+                            "Deadline in 20 minutes or your account will be locked."
+                        ),
+                        "time": "16:58",
+                    }
+                ],
+                "choices": _choices_chat_it(locale),
+            }
+        return {
+            "id": sid,
+            "type": "chat",
+            "title": "Рабочий чат — «IT»",
+            "peer_name": "Техподдержка IT",
+            "peer_handle": "it_support_urgent01",
+            "messages": [
+                {
+                    "from": "peer",
+                    "text": (
+                        "Здравствуйте, это IT. Сегодня ночью миграция почтовых серверов. Ответьте в чат корпоративным паролём, "
+                        "чтобы мы синхронизировали ящик — тикет-система перегружена, не используйте её. "
+                        "Через 20 минут учётка будет заблокирована при отсутствии ответа."
+                    ),
+                    "time": "16:58",
+                }
+            ],
+            "choices": _choices_chat_it(locale),
+        }
+
+    return None
 
 
 class SubmitChoiceBody(BaseModel):
@@ -384,20 +654,28 @@ def _locale_from_request(request: Request, lang: str | None) -> Locale:
     return "en"
 
 
+def _list_entries(locale: Locale) -> list[dict[str, str]]:
+    """Две вкладки: почта и чат (конкретная ситуация подставляется при GET)."""
+    if locale == "en":
+        return [
+            {"id": AGGREGATE_MAIL_ID, "type": "email", "title": "Inbox — phishing"},
+            {"id": AGGREGATE_CHAT_ID, "type": "chat", "title": "Messenger — social engineering"},
+        ]
+    return [
+        {"id": AGGREGATE_MAIL_ID, "type": "email", "title": "Почта — фишинг"},
+        {"id": AGGREGATE_CHAT_ID, "type": "chat", "title": "Чат — социальная инженерия"},
+    ]
+
+
 @router.get("")
 async def list_scenarios(
     request: Request,
     lang: str | None = Query(default=None, description="ru or en"),
 ) -> dict:
     locale = _locale_from_request(request, lang)
-    mail = _scenario_mail(locale)
-    chat = _scenario_chat(locale)
     return {
         "locale": locale,
-        "scenarios": [
-            {"id": mail["id"], "type": mail["type"], "title": mail["title"]},
-            {"id": chat["id"], "type": chat["type"], "title": chat["title"]},
-        ],
+        "scenarios": _list_entries(locale),
     }
 
 
@@ -408,11 +686,10 @@ async def get_scenario(
     lang: str | None = Query(default=None),
 ) -> dict:
     locale = _locale_from_request(request, lang)
-    if scenario_id == "phishing-mail":
-        return {"locale": locale, "scenario": _scenario_mail(locale)}
-    if scenario_id == "se-telegram":
-        return {"locale": locale, "scenario": _scenario_chat(locale)}
-    raise HTTPException(status_code=404, detail="scenario_not_found")
+    scenario = await _scenario_for_get(scenario_id, locale)
+    if not scenario:
+        raise HTTPException(status_code=404, detail="scenario_not_found")
+    return {"locale": locale, "scenario": scenario}
 
 
 @router.post("/{scenario_id}/submit")
@@ -423,10 +700,11 @@ async def submit_choice(
     lang: str | None = Query(default=None),
 ) -> dict:
     locale = _locale_from_request(request, lang)
-    outcomes: dict[str, ChoiceOutcome]
-    if scenario_id == "phishing-mail":
+    sid = _canonical_id(scenario_id)
+
+    if sid == AGGREGATE_MAIL_ID or sid in MAIL_SCENARIO_IDS:
         outcomes = _outcomes_mail(locale)
-    elif scenario_id == "se-telegram":
+    elif sid == AGGREGATE_CHAT_ID or sid in CHAT_SCENARIO_IDS:
         outcomes = _outcomes_chat(locale)
     else:
         raise HTTPException(status_code=404, detail="scenario_not_found")

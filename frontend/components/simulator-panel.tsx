@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useLocale } from "@/components/providers";
 import type { MessageKey } from "@/lib/i18n";
+import { fetchLlmConfig, postAiChat } from "@/lib/ai";
+import { buildCoachSystemPrompt, buildCoachUserPrompt } from "@/lib/coachPrompt";
 import {
   fetchSimulatorScenario,
   fetchSimulatorScenarios,
@@ -47,8 +49,20 @@ export function SimulatorPanel() {
   const [shield, setShield] = useState(100);
   const [xp, setXp] = useState(0);
   const [shakeStage, setShakeStage] = useState(false);
+  const [llmOk, setLlmOk] = useState<boolean | null>(null);
+  const [coachText, setCoachText] = useState<string | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachErr, setCoachErr] = useState<string | null>(null);
+  /** Смена вкладки или «Обновить» — новый запрос сценария (случайный вариант на сервере). */
+  const [scenarioNonce, setScenarioNonce] = useState(0);
 
-  const loadList = useCallback(async () => {
+  useEffect(() => {
+    void fetchLlmConfig()
+      .then((c) => setLlmOk(c.api_key_configured))
+      .catch(() => setLlmOk(false));
+  }, []);
+
+  const loadList = useCallback(async (): Promise<boolean> => {
     setLoadingList(true);
     setErr(null);
     try {
@@ -56,11 +70,15 @@ export function SimulatorPanel() {
       setList(scenarios);
       setActiveId((prev) => {
         if (prev && scenarios.some((s) => s.id === prev)) return prev;
-        return scenarios[0]?.id ?? null;
+        if (scenarios.length === 0) return null;
+        const i = Math.floor(Math.random() * scenarios.length);
+        return scenarios[i]!.id;
       });
+      return true;
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
       setList([]);
+      return false;
     } finally {
       setLoadingList(false);
     }
@@ -93,7 +111,39 @@ export function SimulatorPanel() {
   useEffect(() => {
     if (activeId) void loadScenario(activeId);
     else setScenario(null);
-  }, [activeId, loadScenario]);
+  }, [activeId, scenarioNonce, loadScenario]);
+
+  const scenarioContentKey = useMemo(() => {
+    if (!scenario) return "";
+    if (scenario.type === "email") {
+      return `${scenario.subject}|${scenario.sender_email}|${scenario.cta_href_display}`;
+    }
+    return `${scenario.peer_handle}\0${scenario.messages[0]?.text ?? ""}`;
+  }, [scenario]);
+
+  useEffect(() => {
+    setCoachText(null);
+    setCoachErr(null);
+  }, [scenarioContentKey]);
+
+  const onCoach = async () => {
+    if (!scenario) return;
+    setCoachLoading(true);
+    setCoachErr(null);
+    try {
+      const res = await postAiChat({
+        prompt: buildCoachUserPrompt(scenario, lang),
+        system_prompt: buildCoachSystemPrompt(lang),
+        temperature: 0.28,
+        max_tokens: 520,
+      });
+      setCoachText(res.content);
+    } catch (e) {
+      setCoachErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCoachLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!lastResult?.ok || !lastResult.result) return;
@@ -195,11 +245,23 @@ export function SimulatorPanel() {
                     {t("simLevel")} {level}
                   </span>
                 </div>
+                <p className="mt-2 text-[10px] text-ink-muted">
+                  {llmOk === null
+                    ? "Mistral…"
+                    : llmOk
+                      ? t("simMistralOn")
+                      : t("simMistralOff")}
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => void loadList()}
-                disabled={loadingList}
+                onClick={() =>
+                  void (async () => {
+                    const ok = await loadList();
+                    if (ok) setScenarioNonce((n) => n + 1);
+                  })()
+                }
+                disabled={loadingList || loadingScenario}
                 className="rounded-xl border border-slate-200/80 bg-white/60 px-4 py-2 text-xs font-semibold text-ink shadow-sm transition hover:border-cyan-500/40 hover:shadow-neon-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900/60 dark:hover:border-cyan-500/30"
               >
                 {loadingList ? "…" : t("simRefresh")}
@@ -254,7 +316,6 @@ export function SimulatorPanel() {
                       {s.type === "email" ? t("simTypeEmail") : t("simTypeChat")}
                     </span>
                     <span className="mt-1 block font-semibold text-ink">{s.title}</span>
-                    <span className="mt-1 font-mono text-[10px] text-ink-muted/80">{s.id}</span>
                     {active ? (
                       <motion.span
                         layoutId="missionGlow"
@@ -280,7 +341,7 @@ export function SimulatorPanel() {
           <AnimatePresence mode="wait">
             {scenario && !loadingScenario ? (
               <motion.div
-                key={scenario.id}
+                key={scenarioContentKey}
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -12 }}
@@ -292,6 +353,39 @@ export function SimulatorPanel() {
                 ) : (
                   <ChatCinematic s={scenario} t={t} />
                 )}
+
+                <div className="mt-6 rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-500/10 via-transparent to-cyan-500/10 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-300">
+                        {t("simCoachTitle")}
+                      </p>
+                      <p className="mt-1 text-xs text-ink-muted">{t("simCoachHint")}</p>
+                    </div>
+                    <motion.button
+                      type="button"
+                      disabled={coachLoading || llmOk === false}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => void onCoach()}
+                      className="rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-lg shadow-violet-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {coachLoading ? "…" : t("simCoachBtn")}
+                    </motion.button>
+                  </div>
+                  {coachErr ? (
+                    <p className="mt-3 text-xs text-red-600 dark:text-red-300">{coachErr}</p>
+                  ) : null}
+                  {coachText ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-4 rounded-xl border border-white/10 bg-black/5 p-4 text-sm leading-relaxed text-ink dark:bg-white/5"
+                    >
+                      {coachText}
+                    </motion.div>
+                  ) : null}
+                </div>
 
                 <div className="mt-8">
                   <p className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-ink-muted">

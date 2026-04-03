@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     auth_service_url: str = "http://localhost:8001"
     simulation_service_url: str = "http://localhost:8002"
     progress_service_url: str = "http://localhost:8003"
+    ai_service_url: str = "http://localhost:8004"
 
     jwt_secret: str
     jwt_algorithm: str = "HS256"

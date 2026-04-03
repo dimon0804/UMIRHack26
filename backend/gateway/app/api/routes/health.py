@@ -21,6 +21,7 @@ async def aggregated_health(request: Request) -> dict:
     targets = {
         "auth": f"{settings.auth_service_url.rstrip('/')}/health",
         "simulation": f"{settings.simulation_service_url.rstrip('/')}/health",
+        "ai": f"{settings.ai_service_url.rstrip('/')}/health",
         "progress": f"{settings.progress_service_url.rstrip('/')}/health",
     }
     async with httpx.AsyncClient(timeout=httpx.Timeout(3.0)) as client:

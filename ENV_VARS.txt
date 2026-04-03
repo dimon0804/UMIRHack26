@@ -1,0 +1,19 @@
+# Переменные окружения (основной файл — .env в корне, в .gitignore).
+
+# Mistral из облака (проще всего в Docker):
+#   LLM_MODE=mistral_sdk
+#   MISTRAL_BASE_URL=https://api.mistral.ai
+#   MISTRAL_API_KEY=ваш_ключ
+#
+# Ошибка «LLM endpoint unreachable: All connection attempts failed» почти всегда значит:
+#   включён LLM_MODE=openai_http, а MISTRAL_BASE_URL указывает на недоступный адрес
+#   (например http://localhost:... из контейнера — localhost там это сам контейнер, не ваш ПК).
+# Исправление: mistral_sdk + api.mistral.ai ИЛИ для локального vLLM на хосте: http://host.docker.internal:ПОРТ
+
+# Сценарии тренажёра (почта/чат): по умолчанию генерирует Mistral через ai-service.
+#   В Docker для simulation-service задано AI_SERVICE_URL=http://ai-service:8000
+#   Отключить LLM и оставить только хардкод: SIMULATION_LLM_SCENARIOS=false
+# Локально без Docker: задайте AI_SERVICE_URL=http://127.0.0.1:ПОРТ (где слушает ai-service),
+#   либо не задавайте URL — будут запасные статические сценарии.
+
+# Прочее: JWT_SECRET, POSTGRES_*, NEXT_PUBLIC_API_URL — см. docker-compose.yml

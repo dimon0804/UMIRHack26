@@ -32,6 +32,16 @@ async def proxy_simulation(path: str, request: Request) -> Response:
 
 
 @router.api_route(
+    "/api/v1/ai/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+async def proxy_ai(path: str, request: Request) -> Response:
+    client: httpx.AsyncClient = request.app.state.http_client
+    base = settings.ai_service_url.rstrip("/")
+    return await forward_request(client, base_url=base, path=path, request=request)
+
+
+@router.api_route(
     "/api/v1/progress/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 )
