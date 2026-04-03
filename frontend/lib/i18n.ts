@@ -1,0 +1,46 @@
+export type Locale = "ru" | "en";
+
+export const messages = {
+  ru: {
+    title: "Симулятор кибератак",
+    subtitle: "Обучающая платформа. Войдите или создайте аккаунт.",
+    email: "Email",
+    password: "Пароль",
+    login: "Вход",
+    register: "Регистрация",
+    submitLogin: "Войти",
+    submitRegister: "Создать аккаунт",
+    themeLight: "Светлая",
+    themeDark: "Тёмная",
+    localeRu: "RU",
+    localeEn: "EN",
+    loggedIn: "Вы вошли",
+    logout: "Выйти",
+    tokenHint: "Access-токен сохранён в sessionStorage для демо.",
+    apiBase: "API (gateway)",
+    errorGeneric: "Ошибка запроса",
+    health: "Статус сервисов",
+  },
+  en: {
+    title: "Cyber Attack Simulator",
+    subtitle: "Training platform. Sign in or create an account.",
+    email: "Email",
+    password: "Password",
+    login: "Sign in",
+    register: "Sign up",
+    submitLogin: "Sign in",
+    submitRegister: "Create account",
+    themeLight: "Light",
+    themeDark: "Dark",
+    localeRu: "RU",
+    localeEn: "EN",
+    loggedIn: "Signed in",
+    logout: "Log out",
+    tokenHint: "Access token stored in sessionStorage for demo.",
+    apiBase: "API (gateway)",
+    errorGeneric: "Request failed",
+    health: "Service status",
+  },
+} as const;
+
+export type MessageKey = keyof (typeof messages)["ru"];
