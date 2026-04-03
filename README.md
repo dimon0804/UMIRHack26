@@ -14,8 +14,9 @@ docker compose up --build
 - **Gateway (OpenAPI):** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Фронтенд:** [http://localhost:3000](http://localhost:3000)
 - **Агрегированный health:** [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
+- **Adminer (PostgreSQL):** [http://localhost:5050](http://localhost:5050) — тема по умолчанию **rmsoft_blue-dark** (синяя тёмная). Вход: СУБД **PostgreSQL**, сервер **`postgres`**, пользователь и пароль из `.env` (`POSTGRES_*`), база например **`auth_db`**, **`simulation_db`** или **`progress_db`**.
 
-Внутренние сервисы не публикуют порты наружу (только через gateway), кроме Postgres/Redis при дефолтном `docker-compose.yml` (удобство разработки).
+Внутренние сервисы не публикуют порты наружу (только через gateway), кроме Postgres/Redis/Adminer при дефолтном `docker-compose.yml` (удобство разработки). **Adminer** не оставляйте доступным из интернета в продакшене без VPN, IP-фильтра или отдельного профиля compose.
 
 ## Структура репозитория
 
@@ -62,6 +63,7 @@ git push -u origin feature/simulation-scenarios
 ## Безопасность
 
 - Пароли: **bcrypt** (passlib). В образе зафиксирован `bcrypt==4.0.1` из‑за совместимости с `passlib` на Python 3.12.
+- **Adminer** даёт полный доступ к БД: используйте только в доверенной сети; в облаке отключайте сервис или вынесите за SSO/VPN.
 - JWT: access (короткий TTL) + refresh (хранится хэш в БД, ротация при refresh).
 - В продакшене: сильный `JWT_SECRET`, TLS на reverse proxy, ограничение CORS, секреты из vault/Kubernetes Secrets.
 

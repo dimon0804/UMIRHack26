@@ -50,3 +50,7 @@ flowchart LR
 | progress   | `progress_db` | HP, уровень, статистика            |
 
 Сейчас `simulation-service` и `progress-service` подняты с `/health` и готовы к наполнению доменной логикой.
+
+## Adminer (только разработка)
+
+В `docker-compose.yml` добавлен контейнер **Adminer** (официальный образ `adminer:*-standalone`) для управления **PostgreSQL** из браузера. Тема оформления задаётся переменной `ADMINER_DESIGN` (по умолчанию `rmsoft_blue-dark` — синяя тёмная; альтернативы: `dracula`, `rmsoft_blue`, `nette` и др. из [designs Adminer](https://github.com/vrana/adminer/tree/master/designs)). В продакшене сервис не должен быть публично доступен.

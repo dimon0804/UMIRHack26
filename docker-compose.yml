@@ -18,6 +18,20 @@ services:
     networks:
       - internal
 
+  adminer:
+    image: adminer:5.4.2-standalone
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      # Встроенные темы: rmsoft_blue-dark (синяя тёмная), dracula, rmsoft_blue, nette — см. https://github.com/vrana/adminer/tree/master/designs
+      ADMINER_DESIGN: ${ADMINER_DESIGN:-rmsoft_blue-dark}
+    ports:
+      - "${ADMINER_PORT:-5050}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
   redis:
     image: redis:7-alpine
     command: redis-server --appendonly yes
