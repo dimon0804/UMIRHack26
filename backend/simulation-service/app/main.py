@@ -1,11 +1,15 @@
 from fastapi import FastAPI
 
+from app.scenario_api import router as scenarios_router
+
 app = FastAPI(
     title="Simulation Service",
-    description="Сценарии атак, проверка решений, последствия (заглушка до интеграции)",
-    version="0.1.0",
+    description="Сценарии тренажёра: почта, чат, проверка решений",
+    version="0.2.0",
     docs_url="/docs",
 )
+
+app.include_router(scenarios_router)
 
 
 @app.get("/health")
