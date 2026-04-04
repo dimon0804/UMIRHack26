@@ -16,6 +16,7 @@ from app.scenario_narrative import (
     scenario_action_cards,
     scenario_skimming,
 )
+from app.services.jury_deliberation import build_jury_deliberation
 from app.services.player_skill import fetch_player_skill_profile
 from app.services.progress_payload import fetch_custom_scenario_payload, is_custom_scenario_id
 from app.services.scenario_llm_client import fetch_llm_scenario
@@ -1072,6 +1073,61 @@ def _training_links_chat_it(locale: Locale) -> list[dict[str, object]]:
     ]
 
 
+def _training_links_vishing_bank(locale: Locale) -> list[dict[str, object]]:
+    """Звонок «банк»: в диалоге URL нет — ссылки как «после звонка в СМС / в приложении»."""
+    if locale == "en":
+        return [
+            {
+                "id": "tl-vish-bank-app",
+                "href": "https://megabank.example.com/app",
+                "label": "Official bank app from the store (no link from strangers)",
+                "is_phishing": False,
+            },
+            {
+                "id": "tl-vish-bank-phone",
+                "href": "tel:+18005550199",
+                "label": "Call the number on your card — not a number the caller gave you",
+                "is_phishing": False,
+            },
+            {
+                "id": "tl-vish-bank-phish-sms",
+                "href": "https://megabank-antifraud-secure.net/unblock?sid=7f3a9c2",
+                "label": "“Confirm / unblock operation” — typical fake SMS link after a vishing call",
+                "is_phishing": True,
+                "breach_subject": "MegaBank — confirm device to unblock transfer",
+                "breach_preview": (
+                    "We could not verify the caller. Enter the card security code and the SMS one-time password "
+                    "on this page to release the hold on your account."
+                ),
+            },
+        ]
+    return [
+        {
+            "id": "tl-vish-bank-app",
+            "href": "https://megabank.example.com/app",
+            "label": "Официальное приложение банка из магазина (не по ссылке от звонящего)",
+            "is_phishing": False,
+        },
+        {
+            "id": "tl-vish-bank-phone",
+            "href": "tel:+78005553535",
+            "label": "Позвонить на номер с оборота карты — не тот, что продиктовали по телефону",
+            "is_phishing": False,
+        },
+        {
+            "id": "tl-vish-bank-phish-sms",
+            "href": "https://megabank-antifraud-secure.net/unblock?sid=7f3a9c2",
+            "label": "«Подтвердить / снять блокировку» — типичная фейковая ссылка из СМС после звонка",
+            "is_phishing": True,
+            "breach_subject": "МегаБанк — подтвердите устройство, чтобы снять блокировку перевода",
+            "breach_preview": (
+                "Мы не смогли подтвердить звонящего. Введите код безопасности карты и одноразовый пароль из СМС "
+                "на этой странице, чтобы снять ограничение со счёта."
+            ),
+        },
+    ]
+
+
 def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
     sid = _canonical_id(scenario_id)
 
@@ -1362,7 +1418,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                         "time": "12:42",
                     },
                 ],
-                "training_links": _training_links_chat_it(locale),
+                "training_links": _training_links_vishing_bank(locale),
                 "choices": _choices_chat_wire(locale),
             }
         return {
@@ -1406,7 +1462,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                     "time": "12:42",
                 },
             ],
-            "training_links": _training_links_chat_it(locale),
+            "training_links": _training_links_vishing_bank(locale),
             "choices": _choices_chat_wire(locale),
         }
 
@@ -1795,7 +1851,14 @@ async def submit_choice(
             return {"ok": False, "error": "unknown_choice", "locale": locale}
         dumped = outcome.model_dump()
         _emit_sim_soc(sid, st, body.choice_id, dumped)
-        return {"ok": True, "locale": locale, "result": dumped}
+        jury = await build_jury_deliberation(
+            scenario_id=sid,
+            locale=locale,
+            choice_id=body.choice_id,
+            is_safe=bool(dumped.get("is_safe")),
+            teach_title=str(dumped.get("teach_title") or ""),
+        )
+        return {"ok": True, "locale": locale, "result": dumped, "jury": jury}
 
     if sid == AGGREGATE_SKIMMING_ID:
         raw = outcome_skimming(locale, st, body.choice_id)
@@ -1803,7 +1866,14 @@ async def submit_choice(
             return {"ok": False, "error": "unknown_choice", "locale": locale}
         dumped = ChoiceOutcome(**raw).model_dump()
         _emit_sim_soc(sid, st, body.choice_id, dumped)
-        return {"ok": True, "locale": locale, "result": dumped}
+        jury = await build_jury_deliberation(
+            scenario_id=sid,
+            locale=locale,
+            choice_id=body.choice_id,
+            is_safe=bool(dumped.get("is_safe")),
+            teach_title=str(dumped.get("teach_title") or ""),
+        )
+        return {"ok": True, "locale": locale, "result": dumped, "jury": jury}
 
     if sid == AGGREGATE_ACTION_ID:
         raw = outcome_action(locale, st, body.choice_id)
@@ -1811,7 +1881,14 @@ async def submit_choice(
             return {"ok": False, "error": "unknown_choice", "locale": locale}
         dumped = ChoiceOutcome(**raw).model_dump()
         _emit_sim_soc(sid, st, body.choice_id, dumped)
-        return {"ok": True, "locale": locale, "result": dumped}
+        jury = await build_jury_deliberation(
+            scenario_id=sid,
+            locale=locale,
+            choice_id=body.choice_id,
+            is_safe=bool(dumped.get("is_safe")),
+            teach_title=str(dumped.get("teach_title") or ""),
+        )
+        return {"ok": True, "locale": locale, "result": dumped, "jury": jury}
 
     if sid == AGGREGATE_MAIL_ID or sid in MAIL_SCENARIO_IDS:
         outcomes = _outcomes_mail(locale)
@@ -1828,8 +1905,16 @@ async def submit_choice(
 
     dumped = outcome.model_dump()
     _emit_sim_soc(sid, st, body.choice_id, dumped)
+    jury = await build_jury_deliberation(
+        scenario_id=sid,
+        locale=locale,
+        choice_id=body.choice_id,
+        is_safe=bool(dumped.get("is_safe")),
+        teach_title=str(dumped.get("teach_title") or ""),
+    )
     return {
         "ok": True,
         "locale": locale,
         "result": dumped,
+        "jury": jury,
     }

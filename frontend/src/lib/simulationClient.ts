@@ -108,6 +108,17 @@ export type ApiScenarioUnion =
   | ApiTerminalScenario
   | ApiActionCardsScenario;
 
+/** Ответ simulation-service «Суд присяжных» после submit. */
+export type JuryDeliberationPayload = {
+  for_points: string[];
+  against_points: string[];
+  llm_comment: string | null;
+  verdict_title: string;
+  verdict_body: string;
+  verdict_aligns_safe: boolean;
+  bonus_xp: number;
+};
+
 export type SubmitResult = {
   ok: boolean;
   locale?: string;
@@ -124,6 +135,7 @@ export type SubmitResult = {
     consequence_steps: { title: string; detail: string }[];
     hint?: string | null;
   };
+  jury?: JuryDeliberationPayload | null;
 };
 
 function apiPath(path: string) {

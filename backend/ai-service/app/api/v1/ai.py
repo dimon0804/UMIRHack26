@@ -2,8 +2,10 @@ from fastapi import APIRouter
 
 from app.core.config import settings
 from app.schemas.ai import ChatRequest, ChatResponse
+from app.schemas.jury import JuryTakeRequest, JuryTakeResponse
 from app.schemas.scenario_gen import ScenarioGenerateRequest, ScenarioGenerateResponse
 from app.schemas.track_gen import TrackGenerateRequest, TrackGenerateResponse
+from app.services.jury_commentary import generate_jury_commentary
 from app.services.mistral_client import MistralClient
 from app.services.scenario_generator import generate_training_scenario
 from app.services.track_generator import generate_training_track
@@ -40,3 +42,9 @@ async def generate_scenario(body: ScenarioGenerateRequest) -> ScenarioGenerateRe
 async def generate_track(body: TrackGenerateRequest) -> TrackGenerateResponse:
     """Mistral: трек из 3 шагов (ситуации, ответы, рекомендации) для экрана «Сценарии»."""
     return await generate_training_track(body)
+
+
+@router.post("/jury-take", response_model=JuryTakeResponse)
+async def jury_take(body: JuryTakeRequest) -> JuryTakeResponse:
+    """Короткий связующий комментарий для экрана «Суд присяжных» после выбора в симуляции."""
+    return await generate_jury_commentary(body)

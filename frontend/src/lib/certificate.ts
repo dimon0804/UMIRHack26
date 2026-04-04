@@ -15,6 +15,11 @@ export function generateCertificateId(): string {
   return crypto.randomUUID().replace(/-/g, "").slice(0, 16);
 }
 
+/** Формат ID на бланке и в ссылке /verify/:id (16 hex). */
+export function certificateIdLooksValid(id: string): boolean {
+  return /^[a-f0-9]{16}$/i.test(id.trim());
+}
+
 export function accuracyPercent(state: UserState): number | null {
   if (state.totalAnswers === 0) return null;
   return Math.round((state.totalCorrect / state.totalAnswers) * 100);

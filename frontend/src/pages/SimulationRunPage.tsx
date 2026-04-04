@@ -6,6 +6,7 @@ import { FakeBrowserFrame } from "@/components/FakeBrowserFrame";
 import { FakeMessengerFrame } from "@/components/FakeMessengerFrame";
 import { VishingVoiceCall } from "@/components/VishingVoiceCall";
 import { IntrusionTheater } from "@/components/IntrusionTheater";
+import { JuryDeliberationCard } from "@/components/JuryDeliberationCard";
 import {
   fetchSimulationScenario,
   submitSimulationChoice,
@@ -15,6 +16,7 @@ import {
   type ApiScenarioUnion,
   type ApiTerminalScenario,
   type ApiWifiScenario,
+  type JuryDeliberationPayload,
 } from "@/lib/simulationClient";
 import {
   type BreachDrillOutcome,
@@ -100,7 +102,13 @@ export function SimulationRunPage() {
   const [runHpDelta, setRunHpDelta] = useState(0);
   const [uiStep, setUiStep] = useState(1);
   const [theaterActive, setTheaterActive] = useState(false);
-  const pendingUnsafeRef = useRef<{ r: SimChoiceResult; curStep: number; totalSteps: number } | null>(null);
+  const [jury, setJury] = useState<JuryDeliberationPayload | null>(null);
+  const pendingUnsafeRef = useRef<{
+    r: SimChoiceResult;
+    curStep: number;
+    totalSteps: number;
+    jury: JuryDeliberationPayload | null;
+  } | null>(null);
   const linkBreachUnsafeRef = useRef(false);
   const [linkBreachReminder, setLinkBreachReminder] = useState(false);
   const [emailPane, setEmailPane] = useState<"inbox" | "link">("inbox");
@@ -154,6 +162,7 @@ export function SimulationRunPage() {
       setLoading(true);
       setLoadError(null);
       setResult(null);
+      setJury(null);
       setRunHpDelta(0);
       setTheaterActive(false);
       pendingUnsafeRef.current = null;
@@ -208,9 +217,16 @@ export function SimulationRunPage() {
   }, [location.state, location.pathname, location.search, nav]);
 
   const commitChoiceResult = useCallback(
-    (r: SimChoiceResult, curStep: number, totalStepsArg: number, scenarioData: ApiScenarioUnion) => {
+    (
+      r: SimChoiceResult,
+      curStep: number,
+      totalStepsArg: number,
+      scenarioData: ApiScenarioUnion,
+      juryPayload: JuryDeliberationPayload | null,
+    ) => {
       if (!id) return;
       setResult(r);
+      setJury(juryPayload);
       setRunHpDelta((d) => d + r.security_delta);
 
       const mistakes: ScenarioRunSummary["mistakes"] = r.is_safe
@@ -224,6 +240,7 @@ export function SimulationRunPage() {
           ];
 
       const moduleComplete = curStep >= totalStepsArg;
+      const bonus = juryPayload?.bonus_xp && juryPayload.bonus_xp > 0 ? juryPayload.bonus_xp : 0;
 
       applyScenarioResult({
         scenarioId: id,
@@ -231,7 +248,7 @@ export function SimulationRunPage() {
         correct: r.is_safe ? 1 : 0,
         wrong: r.is_safe ? 0 : 1,
         hpDelta: r.security_delta,
-        xpGained: r.xp_delta,
+        xpGained: r.xp_delta + bonus,
         mistakes,
         simulationStep: curStep,
         totalSimulationSteps: totalStepsArg,
@@ -248,7 +265,7 @@ export function SimulationRunPage() {
     const p = pendingUnsafeRef.current;
     pendingUnsafeRef.current = null;
     if (p && data) {
-      commitChoiceResult(p.r, p.curStep, p.totalSteps, data);
+      commitChoiceResult(p.r, p.curStep, p.totalSteps, data, p.jury);
     }
   }, [data, commitChoiceResult]);
 
@@ -276,6 +293,7 @@ export function SimulationRunPage() {
         return;
       }
       let r = res.result;
+      const juryPayload = res.jury ?? null;
       const ts = totalSteps;
       const hadLinkBreachMistake = linkBreachUnsafeRef.current;
 
@@ -292,12 +310,12 @@ export function SimulationRunPage() {
           teach_body: keepApiFeedback ? r.teach_body : t("sim.breachLinkedFailBody"),
           hint: keepApiFeedback ? r.hint : null,
         };
-        commitChoiceResult(r, curStep, ts, data);
+        commitChoiceResult(r, curStep, ts, data, juryPayload);
       } else if (!r.is_safe) {
-        pendingUnsafeRef.current = { r, curStep, totalSteps: ts };
+        pendingUnsafeRef.current = { r, curStep, totalSteps: ts, jury: juryPayload };
         setTheaterActive(true);
       } else {
-        commitChoiceResult(r, curStep, ts, data);
+        commitChoiceResult(r, curStep, ts, data, juryPayload);
       }
     } finally {
       setSubmitting(false);
@@ -309,6 +327,7 @@ export function SimulationRunPage() {
     restartScenario(id);
     clearScenarioSessionStorageFor(id);
     setResult(null);
+    setJury(null);
     setRunHpDelta(0);
     setUiStep(1);
     setTheaterActive(false);
@@ -321,6 +340,7 @@ export function SimulationRunPage() {
 
   function onContinueLevel() {
     setResult(null);
+    setJury(null);
     setRunHpDelta(0);
     setTheaterActive(false);
     pendingUnsafeRef.current = null;
@@ -739,8 +759,16 @@ export function SimulationRunPage() {
                     HP {result.security_delta >= 0 ? "+" : ""}
                     {result.security_delta} · XP {result.xp_delta >= 0 ? "+" : ""}
                     {result.xp_delta}
+                    {jury && jury.bonus_xp > 0 ? (
+                      <span className="text-violet-700 dark:text-violet-300">
+                        {" "}
+                        (+{jury.bonus_xp} {t("sim.juryBonusXp")})
+                      </span>
+                    ) : null}
                   </p>
                 </div>
+
+                {jury ? <JuryDeliberationCard jury={jury} /> : null}
 
                 {result.show_consequences && result.consequence_steps.length > 0 && (
                   <div className="rounded-2xl border border-stone-200/80 bg-white/60 p-5 dark:border-stone-700/60 dark:bg-stone-900/40">

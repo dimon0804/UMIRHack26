@@ -15,6 +15,7 @@ import { ProfilePage } from "@/pages/ProfilePage";
 import { CertificatePage } from "@/pages/CertificatePage";
 import { LeaderboardPage } from "@/pages/LeaderboardPage";
 import { VerifyPage } from "@/pages/VerifyPage";
+import { NotFoundPage } from "@/pages/NotFoundPage";
 import { LiveSocPage } from "@/pages/LiveSocPage";
 
 function Shell({ children }: { children: ReactNode }) {
@@ -114,7 +115,7 @@ export default function App() {
           }
         />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Shell>
   );

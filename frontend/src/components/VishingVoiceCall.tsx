@@ -68,6 +68,8 @@ export function VishingVoiceCall({
   const audioCtxRef = useRef<AudioContext | null>(null);
   const ttsCancelRef = useRef(false);
   const ringGenRef = useRef(0);
+  /** Синхронно с play(): иначе timeupdate успевает прийти раньше setState(driver), и подсветка залипает на 1-й реплике. */
+  const driverRef = useRef<"none" | "audio" | "tts">("none");
 
   const peerIndices = useMemo(
     () => messages.map((m, i) => (m.from === "peer" ? i : -1)).filter((i) => i >= 0),
@@ -122,12 +124,14 @@ export function VishingVoiceCall({
   const runTts = useCallback(async () => {
     if (typeof window === "undefined" || !window.speechSynthesis) {
       setPhase("ended");
+      driverRef.current = "none";
       setDriver("none");
       return;
     }
     ttsCancelRef.current = false;
     const synth = window.speechSynthesis;
     synth.cancel();
+    driverRef.current = "tts";
     setDriver("tts");
 
     for (let p = 0; p < peerIndices.length; p++) {
@@ -151,6 +155,7 @@ export function VishingVoiceCall({
     if (!ttsCancelRef.current) {
       onHighlightIndex(null);
       setPhase("ended");
+      driverRef.current = "none";
       setDriver("none");
     }
   }, [messages, onHighlightIndex, pauseBetweenMs, peerIndices, ttsLang]);
@@ -197,6 +202,7 @@ export function VishingVoiceCall({
 
           if (loaded) {
             try {
+              driverRef.current = "audio";
               setDriver("audio");
               setPhase("playing");
               setAudioProgress(0);
@@ -277,13 +283,13 @@ export function VishingVoiceCall({
     if (!a || !hasAudioSrc) return;
 
     const cues = voiceCall.cues_sec ?? [];
-    const onTime = () => {
-      if (driver !== "audio") return;
+    const applyCues = (currentTime: number) => {
+      if (driverRef.current !== "audio") return;
       const dur = a.duration;
       if (dur && Number.isFinite(dur) && dur > 0) {
-        setAudioProgress(a.currentTime / dur);
+        setAudioProgress(currentTime / dur);
       }
-      const t = a.currentTime;
+      const t = currentTime;
       let active: number | null = null;
       for (let i = cues.length - 1; i >= 0; i--) {
         if (t + 0.04 >= cues[i]!) {
@@ -295,20 +301,27 @@ export function VishingVoiceCall({
       onHighlightIndex(active);
     };
 
+    const onTime = () => applyCues(a.currentTime);
+
+    const onPlaying = () => applyCues(a.currentTime);
+
     const onEnded = () => {
       onHighlightIndex(null);
       setAudioProgress(null);
+      driverRef.current = "none";
       setDriver("none");
       setPhase("ended");
     };
 
     a.addEventListener("timeupdate", onTime);
+    a.addEventListener("playing", onPlaying);
     a.addEventListener("ended", onEnded);
     return () => {
       a.removeEventListener("timeupdate", onTime);
+      a.removeEventListener("playing", onPlaying);
       a.removeEventListener("ended", onEnded);
     };
-  }, [driver, hasAudioSrc, onHighlightIndex, peerIndices, voiceCall.cues_sec]);
+  }, [hasAudioSrc, onHighlightIndex, peerIndices, voiceCall.cues_sec]);
 
   const hintText = useMemo(() => {
     if (voiceCall.mode === "hybrid") {
