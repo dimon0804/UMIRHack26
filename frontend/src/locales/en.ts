@@ -123,7 +123,12 @@ export const en: Record<string, string> = {
   "sim.vishingPlaying": "Playing",
   "sim.vishingEnded": "Clip finished — pick your action.",
   "sim.vishingTtsHint":
-    "Voice uses your browser’s speech synthesis (like an auto-attendant). You can swap in recorded tracks under public/vishing later.",
+    "Voice uses your browser’s speech synthesis. You can replace files under public/vishing.",
+  "sim.vishingHybridHint":
+    "A short training track plays first (synced to chat lines). If the file fails to load, the browser will use speech synthesis.",
+  "sim.vishingAudioHint": "Recorded track only; bubbles highlight from the cue timeline.",
+  "sim.vishingPlayingTrack": "Track",
+  "sim.vishingFallbackBadge": "Speech synthesis",
   "sim.badgeWifi": "Wi‑Fi",
   "sim.wifiNetworks": "Networks in range",
   "sim.wifiSecured": "Encrypted",

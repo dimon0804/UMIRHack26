@@ -22,14 +22,14 @@ export type ApiDynamicDifficulty = {
   skill_score: number;
 };
 
-/** Симуляция звонка (vishing): TTS или готовая дорожка + разметка времени */
+/** Симуляция звонка (vishing): TTS, файл или hybrid (файл с fallback на TTS) */
 export type ApiVoiceCall = {
-  mode: "tts" | "audio";
+  mode: "tts" | "audio" | "hybrid";
   /** Подпись в UI («Входящий звонок») */
   label?: string;
-  /** Путь к файлу (например /vishing/track.mp3) при mode=audio */
+  /** Путь к файлу в public (например /vishing/vishing-bank.wav) */
   audio_src?: string;
-  /** Секунды начала реплики i (порядок как у сообщений peer); для синхронной подсветки */
+  /** Секунды начала реплики i (i-й peer в порядке сообщений); синхрон с дорожкой */
   cues_sec?: number[];
   pause_between_ms?: number;
 };

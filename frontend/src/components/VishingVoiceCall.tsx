@@ -4,7 +4,7 @@ import type { ApiVoiceCall } from "@/lib/simulationClient";
 
 type Msg = { from: string; text: string };
 
-function playRingPattern(ctx: AudioContext): Promise<void> {
+function playRingPattern(ctx: AudioContext, shouldAbort: () => boolean): Promise<void> {
   const rings = 3;
   const toneMs = 320;
   const gapMs = 220;
@@ -14,6 +14,10 @@ function playRingPattern(ctx: AudioContext): Promise<void> {
   return new Promise((resolve) => {
     let n = 0;
     const schedule = () => {
+      if (shouldAbort()) {
+        resolve();
+        return;
+      }
       if (n >= rings) {
         resolve();
         return;
@@ -56,9 +60,14 @@ export function VishingVoiceCall({
 }) {
   const { locale, t } = useI18n();
   const [phase, setPhase] = useState<"idle" | "ringing" | "playing" | "paused" | "ended">("idle");
+  const [driver, setDriver] = useState<"none" | "audio" | "tts">("none");
+  const [ttsFallback, setTtsFallback] = useState(false);
+  const [audioProgress, setAudioProgress] = useState<number | null>(null);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const ttsCancelRef = useRef(false);
+  const ringGenRef = useRef(0);
 
   const peerIndices = useMemo(
     () => messages.map((m, i) => (m.from === "peer" ? i : -1)).filter((i) => i >= 0),
@@ -68,8 +77,16 @@ export function VishingVoiceCall({
   const ttsLang = locale === "en" ? "en-US" : "ru-RU";
   const pauseBetweenMs = voiceCall.pause_between_ms ?? 550;
 
+  const hasAudioSrc = Boolean(voiceCall.audio_src?.trim());
+  const wantsRecorded =
+    hasAudioSrc && (voiceCall.mode === "audio" || voiceCall.mode === "hybrid");
+
   const stopAll = useCallback(() => {
+    ringGenRef.current += 1;
     ttsCancelRef.current = true;
+    setDriver("none");
+    setTtsFallback(false);
+    setAudioProgress(null);
     try {
       window.speechSynthesis.cancel();
     } catch {
@@ -78,7 +95,8 @@ export function VishingVoiceCall({
     const a = audioRef.current;
     if (a) {
       a.pause();
-      a.currentTime = 0;
+      a.removeAttribute("src");
+      a.load();
     }
     onHighlightIndex(null);
     setPhase("idle");
@@ -86,6 +104,7 @@ export function VishingVoiceCall({
 
   useEffect(() => {
     return () => {
+      ringGenRef.current += 1;
       ttsCancelRef.current = true;
       try {
         window.speechSynthesis.cancel();
@@ -103,11 +122,13 @@ export function VishingVoiceCall({
   const runTts = useCallback(async () => {
     if (typeof window === "undefined" || !window.speechSynthesis) {
       setPhase("ended");
+      setDriver("none");
       return;
     }
     ttsCancelRef.current = false;
     const synth = window.speechSynthesis;
     synth.cancel();
+    setDriver("tts");
 
     for (let p = 0; p < peerIndices.length; p++) {
       if (ttsCancelRef.current) break;
@@ -130,6 +151,7 @@ export function VishingVoiceCall({
     if (!ttsCancelRef.current) {
       onHighlightIndex(null);
       setPhase("ended");
+      setDriver("none");
     }
   }, [messages, onHighlightIndex, pauseBetweenMs, peerIndices, ttsLang]);
 
@@ -137,19 +159,68 @@ export function VishingVoiceCall({
     if (disabled) return;
     stopAll();
     ttsCancelRef.current = false;
+    setTtsFallback(false);
+    const sessionGen = ringGenRef.current;
 
-    if (voiceCall.mode === "audio" && voiceCall.audio_src?.trim()) {
-      setPhase("playing");
-      const a = audioRef.current;
-      if (!a) return;
-      a.src = voiceCall.audio_src.trim();
-      try {
-        await a.play();
-      } catch {
-        setPhase("idle");
+    const afterRing = async () => {
+      if (sessionGen !== ringGenRef.current || ttsCancelRef.current) return;
+
+      if (wantsRecorded) {
+        const a = audioRef.current;
+        const url = voiceCall.audio_src!.trim();
+        if (a) {
+          a.src = url;
+          a.load();
+          const loaded = await new Promise<boolean>((resolve) => {
+            let settled = false;
+            const to = window.setTimeout(() => {
+              if (!settled) {
+                settled = true;
+                resolve(false);
+              }
+            }, 12000);
+            const finish = (v: boolean) => {
+              if (settled) return;
+              settled = true;
+              window.clearTimeout(to);
+              resolve(v);
+            };
+            a.onloadeddata = () => finish(true);
+            a.oncanplaythrough = () => finish(true);
+            a.onerror = () => finish(false);
+          });
+          a.onloadeddata = null;
+          a.oncanplaythrough = null;
+          a.onerror = null;
+
+          if (sessionGen !== ringGenRef.current || ttsCancelRef.current) return;
+
+          if (loaded) {
+            try {
+              setDriver("audio");
+              setPhase("playing");
+              setAudioProgress(0);
+              await a.play();
+              return;
+            } catch {
+              /* fall through */
+            }
+          }
+
+          if (voiceCall.mode === "hybrid") {
+            setTtsFallback(true);
+            setPhase("playing");
+            await runTts();
+            return;
+          }
+          setPhase("idle");
+          return;
+        }
       }
-      return;
-    }
+
+      setPhase("playing");
+      await runTts();
+    };
 
     setPhase("ringing");
     try {
@@ -160,20 +231,19 @@ export function VishingVoiceCall({
         }
         const ctx = audioCtxRef.current;
         if (ctx.state === "suspended") await ctx.resume();
-        await playRingPattern(ctx);
+        await playRingPattern(ctx, () => sessionGen !== ringGenRef.current || ttsCancelRef.current);
       }
     } catch {
       /* ring optional */
     }
 
-    if (ttsCancelRef.current) return;
-    setPhase("playing");
-    await runTts();
-  }, [disabled, runTts, stopAll, voiceCall.audio_src, voiceCall.mode]);
+    await afterRing();
+  }, [disabled, runTts, stopAll, voiceCall.audio_src, voiceCall.mode, wantsRecorded]);
 
   const togglePause = useCallback(() => {
-    const a = audioRef.current;
-    if (voiceCall.mode === "audio" && a?.src) {
+    if (driver === "audio") {
+      const a = audioRef.current;
+      if (!a?.src) return;
       if (a.paused) {
         void a.play();
         setPhase("playing");
@@ -183,29 +253,36 @@ export function VishingVoiceCall({
       }
       return;
     }
-    if (phase === "playing") {
-      try {
-        window.speechSynthesis.pause();
-      } catch {
-        /* ignore */
+    if (driver === "tts") {
+      if (phase === "playing") {
+        try {
+          window.speechSynthesis.pause();
+        } catch {
+          /* ignore */
+        }
+        setPhase("paused");
+      } else if (phase === "paused") {
+        try {
+          window.speechSynthesis.resume();
+        } catch {
+          /* ignore */
+        }
+        setPhase("playing");
       }
-      setPhase("paused");
-    } else if (phase === "paused") {
-      try {
-        window.speechSynthesis.resume();
-      } catch {
-        /* ignore */
-      }
-      setPhase("playing");
     }
-  }, [phase, voiceCall.mode]);
+  }, [driver, phase]);
 
   useEffect(() => {
     const a = audioRef.current;
-    if (!a || voiceCall.mode !== "audio" || !voiceCall.audio_src?.trim()) return;
+    if (!a || !hasAudioSrc) return;
 
     const cues = voiceCall.cues_sec ?? [];
     const onTime = () => {
+      if (driver !== "audio") return;
+      const dur = a.duration;
+      if (dur && Number.isFinite(dur) && dur > 0) {
+        setAudioProgress(a.currentTime / dur);
+      }
       const t = a.currentTime;
       let active: number | null = null;
       for (let i = cues.length - 1; i >= 0; i--) {
@@ -220,6 +297,8 @@ export function VishingVoiceCall({
 
     const onEnded = () => {
       onHighlightIndex(null);
+      setAudioProgress(null);
+      setDriver("none");
       setPhase("ended");
     };
 
@@ -229,9 +308,21 @@ export function VishingVoiceCall({
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("ended", onEnded);
     };
-  }, [voiceCall.audio_src, voiceCall.cues_sec, voiceCall.mode, onHighlightIndex, peerIndices]);
+  }, [driver, hasAudioSrc, onHighlightIndex, peerIndices, voiceCall.cues_sec]);
 
-  const showTtsHint = voiceCall.mode !== "audio" || !voiceCall.audio_src?.trim();
+  const hintText = useMemo(() => {
+    if (voiceCall.mode === "hybrid") {
+      return ttsFallback ? t("sim.vishingTtsHint") : t("sim.vishingHybridHint");
+    }
+    if (voiceCall.mode === "audio") {
+      return t("sim.vishingAudioHint");
+    }
+    return t("sim.vishingTtsHint");
+  }, [voiceCall.mode, ttsFallback, t]);
+
+  const showProgress =
+    driver === "audio" && audioProgress !== null && (phase === "playing" || phase === "paused");
+  const showAudioChrome = hasAudioSrc && (voiceCall.mode === "audio" || (voiceCall.mode === "hybrid" && !ttsFallback));
 
   return (
     <div className="mb-4 rounded-2xl border border-violet-200/80 bg-violet-50/90 px-4 py-3 dark:border-violet-900/50 dark:bg-violet-950/35">
@@ -243,14 +334,25 @@ export function VishingVoiceCall({
           <span className="text-xs font-medium text-violet-800 dark:text-violet-200/90">{t("sim.vishingRinging")}</span>
         ) : null}
         {phase === "playing" ? (
-          <span className="text-xs font-medium text-violet-800 dark:text-violet-200/90">{t("sim.vishingPlaying")}</span>
+          <span className="text-xs font-medium text-violet-800 dark:text-violet-200/90">
+            {driver === "audio" ? t("sim.vishingPlayingTrack") : t("sim.vishingPlaying")}
+          </span>
         ) : null}
         {phase === "ended" ? (
           <span className="text-xs text-violet-700/80 dark:text-violet-300/75">{t("sim.vishingEnded")}</span>
         ) : null}
+        {ttsFallback ? (
+          <span className="text-[10px] font-medium text-amber-800 dark:text-amber-200/90">{t("sim.vishingFallbackBadge")}</span>
+        ) : null}
       </div>
-      {showTtsHint ? (
-        <p className="mt-2 text-[11px] leading-snug text-violet-900/75 dark:text-violet-200/70">{t("sim.vishingTtsHint")}</p>
+      <p className="mt-2 text-[11px] leading-snug text-violet-900/75 dark:text-violet-200/70">{hintText}</p>
+      {showProgress ? (
+        <div className="mt-2 h-1.5 w-full max-w-md overflow-hidden rounded-full bg-violet-200/80 dark:bg-violet-900/50">
+          <div
+            className="h-full rounded-full bg-violet-600 transition-[width] duration-150 dark:bg-violet-400"
+            style={{ width: `${Math.min(100, Math.max(0, audioProgress! * 100))}%` }}
+          />
+        </div>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-2">
         <button
@@ -261,10 +363,10 @@ export function VishingVoiceCall({
         >
           {phase === "idle" || phase === "ended" ? t("sim.vishingPlay") : t("sim.vishingReplay")}
         </button>
-        {(voiceCall.mode === "audio" && voiceCall.audio_src?.trim()) || phase === "playing" || phase === "paused" ? (
+        {(driver === "audio" || driver === "tts") && (phase === "playing" || phase === "paused") ? (
           <button
             type="button"
-            disabled={disabled || phase === "ringing" || phase === "idle" || phase === "ended"}
+            disabled={disabled || phase === "ringing"}
             onClick={() => togglePause()}
             className="rounded-xl border border-violet-400/60 bg-white/80 px-4 py-2 text-xs font-semibold text-violet-900 dark:border-violet-700 dark:bg-zinc-900/60 dark:text-violet-100"
           >
@@ -280,8 +382,14 @@ export function VishingVoiceCall({
           {t("sim.vishingStop")}
         </button>
       </div>
-      {voiceCall.mode === "audio" && voiceCall.audio_src?.trim() ? (
-        <audio ref={audioRef} className="mt-2 h-8 w-full max-w-md" controls preload="none" />
+      {hasAudioSrc ? (
+        <audio
+          ref={audioRef}
+          className={showAudioChrome ? "mt-2 h-8 w-full max-w-md" : "sr-only"}
+          controls={showAudioChrome}
+          preload="none"
+          aria-hidden={!showAudioChrome}
+        />
       ) : null}
     </div>
   );

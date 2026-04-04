@@ -123,7 +123,12 @@ export const ru: Record<string, string> = {
   "sim.vishingPlaying": "Воспроизведение",
   "sim.vishingEnded": "Фрагмент завершён — выберите действие.",
   "sim.vishingTtsHint":
-    "Озвучка через синтез речи браузера (как автоответчик). Позже можно подключить записанные дорожки в папке public/vishing.",
+    "Озвучка через синтез речи браузера (как автоответчик). Можно заменить файлами в public/vishing.",
+  "sim.vishingHybridHint":
+    "Сначала играет короткая учебная дорожка (синхрон с репликами в чате). Если файл не загрузится — включится синтез речи.",
+  "sim.vishingAudioHint": "Воспроизводится только запись; реплики подсвечиваются по разметке времени.",
+  "sim.vishingPlayingTrack": "Дорожка",
+  "sim.vishingFallbackBadge": "Синтез речи",
   "sim.badgeWifi": "Wi‑Fi",
   "sim.wifiNetworks": "Сети в зоне видимости",
   "sim.wifiSecured": "С шифрованием",

@@ -105,6 +105,24 @@ CHAT_SCENARIO_IDS: tuple[str, ...] = (
     "se-chat-it",
 ) + VISHING_SCENARIO_IDS
 
+
+def _vishing_voice_hybrid(
+    *,
+    track_base: str,
+    cues_sec: list[float],
+    pause_between_ms: int,
+    locale: Locale,
+) -> dict[str, object]:
+    """Короткая WAV-дорожка в public/vishing + синхронные метки; при сбое загрузки UI уходит в TTS."""
+    return {
+        "mode": "hybrid",
+        "audio_src": f"/vishing/{track_base}.wav",
+        "cues_sec": cues_sec,
+        "pause_between_ms": pause_between_ms,
+        "label": "Incoming call" if locale == "en" else "Входящий звонок",
+    }
+
+
 WIFI_SCENARIO_IDS: tuple[str, ...] = (
     "wifi-cafe",
     "wifi-airport",
@@ -1313,11 +1331,12 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                 "title": "Incoming call — “bank security”",
                 "peer_name": "Caller · Fraud desk",
                 "peer_handle": "unknown_caller",
-                "voice_call": {
-                    "mode": "tts",
-                    "label": "Incoming call",
-                    "pause_between_ms": 600,
-                },
+                "voice_call": _vishing_voice_hybrid(
+                    track_base="vishing-bank",
+                    cues_sec=[0.0, 4.55, 8.9],
+                    pause_between_ms=600,
+                    locale=locale,
+                ),
                 "messages": [
                     {
                         "from": "peer",
@@ -1356,11 +1375,12 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
             "title": "Входящий звонок — «безопасность банка»",
             "peer_name": "Абонент · антифрод",
             "peer_handle": "unknown_caller",
-            "voice_call": {
-                "mode": "tts",
-                "label": "Входящий звонок",
-                "pause_between_ms": 600,
-            },
+            "voice_call": _vishing_voice_hybrid(
+                track_base="vishing-bank",
+                cues_sec=[0.0, 4.55, 8.9],
+                pause_between_ms=600,
+                locale=locale,
+            ),
             "messages": [
                 {
                     "from": "peer",
@@ -1402,7 +1422,12 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                 "title": "Incoming call — “IT help desk”",
                 "peer_name": "Caller · IT support",
                 "peer_handle": "it_helpdesk_ext",
-                "voice_call": {"mode": "tts", "label": "Incoming call", "pause_between_ms": 550},
+                "voice_call": _vishing_voice_hybrid(
+                    track_base="vishing-it",
+                    cues_sec=[0.0, 5.35],
+                    pause_between_ms=550,
+                    locale=locale,
+                ),
                 "messages": [
                     {
                         "from": "peer",
@@ -1434,7 +1459,12 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
             "title": "Входящий звонок — «IT-поддержка»",
             "peer_name": "Абонент · техподдержка",
             "peer_handle": "it_helpdesk_ext",
-            "voice_call": {"mode": "tts", "label": "Входящий звонок", "pause_between_ms": 550},
+            "voice_call": _vishing_voice_hybrid(
+                track_base="vishing-it",
+                cues_sec=[0.0, 5.35],
+                pause_between_ms=550,
+                locale=locale,
+            ),
             "messages": [
                 {
                     "from": "peer",
@@ -1469,7 +1499,12 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                 "title": "Incoming call — “courier service”",
                 "peer_name": "Caller · Delivery hotline",
                 "peer_handle": "courier_line_884",
-                "voice_call": {"mode": "tts", "label": "Incoming call", "pause_between_ms": 500},
+                "voice_call": _vishing_voice_hybrid(
+                    track_base="vishing-courier",
+                    cues_sec=[0.0, 5.15],
+                    pause_between_ms=500,
+                    locale=locale,
+                ),
                 "messages": [
                     {
                         "from": "peer",
@@ -1501,7 +1536,12 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
             "title": "Входящий звонок — «служба доставки»",
             "peer_name": "Абонент · линия доставки",
             "peer_handle": "courier_line_884",
-            "voice_call": {"mode": "tts", "label": "Входящий звонок", "pause_between_ms": 500},
+            "voice_call": _vishing_voice_hybrid(
+                track_base="vishing-courier",
+                cues_sec=[0.0, 5.15],
+                pause_between_ms=500,
+                locale=locale,
+            ),
             "messages": [
                 {
                     "from": "peer",
