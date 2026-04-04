@@ -1,0 +1,149 @@
+export type ApiScenarioListItem = {
+  id: string;
+  type: "email" | "chat" | "wifi" | "terminal" | "action_cards";
+  title: string;
+};
+
+export type ApiScenarioChoice = { id: string; label: string };
+
+export type ApiScenarioMeta = {
+  step: number;
+  total_steps: number;
+  narrative_arc?: string;
+  attack_family?: string;
+};
+
+export type ApiEmailScenario = ApiScenarioMeta & {
+  id: string;
+  type: "email";
+  title: string;
+  sender_display: string;
+  sender_email: string;
+  subject: string;
+  preview: string;
+  body_paragraphs: string[];
+  cta_label: string;
+  cta_href_display: string;
+  choices: ApiScenarioChoice[];
+};
+
+export type ApiChatScenario = ApiScenarioMeta & {
+  id: string;
+  type: "chat";
+  title: string;
+  peer_name: string;
+  peer_handle: string;
+  messages: { from: "peer" | "me"; text: string; time: string }[];
+  choices: ApiScenarioChoice[];
+};
+
+export type ApiWifiNetwork = { ssid: string; secured: boolean; note?: string };
+
+export type ApiWifiScenario = ApiScenarioMeta & {
+  id: string;
+  type: "wifi";
+  title: string;
+  context: string;
+  networks: ApiWifiNetwork[];
+  choices: ApiScenarioChoice[];
+};
+
+export type ApiTerminalScenario = ApiScenarioMeta & {
+  id: string;
+  type: "terminal";
+  title: string;
+  context: string;
+  device_label: string;
+  choices: ApiScenarioChoice[];
+};
+
+export type ApiActionCard = { id: string; title: string; detail?: string };
+
+export type ApiActionCardsScenario = ApiScenarioMeta & {
+  id: string;
+  type: "action_cards";
+  title: string;
+  situation: string;
+  cards: ApiActionCard[];
+  choices: ApiScenarioChoice[];
+};
+
+export type ApiScenarioUnion =
+  | ApiEmailScenario
+  | ApiChatScenario
+  | ApiWifiScenario
+  | ApiTerminalScenario
+  | ApiActionCardsScenario;
+
+export type SubmitResult = {
+  ok: boolean;
+  locale?: string;
+  error?: string;
+  result?: {
+    choice_id: string;
+    is_safe: boolean;
+    severity: "none" | "low" | "medium" | "critical";
+    security_delta: number;
+    xp_delta: number;
+    teach_title: string;
+    teach_body: string;
+    show_consequences: boolean;
+    consequence_steps: { title: string; detail: string }[];
+    hint?: string | null;
+  };
+};
+
+function apiPath(path: string) {
+  const base = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+export async function fetchSimulationScenarioList(
+  lang: "ru" | "en",
+): Promise<{ scenarios: ApiScenarioListItem[] }> {
+  const r = await fetch(apiPath(`/api/v1/simulation/scenarios?lang=${lang}`), {
+    cache: "no-store",
+    headers: { "Accept-Language": lang },
+  });
+  if (!r.ok) throw new Error(`scenarios ${r.status}`);
+  return r.json() as Promise<{ scenarios: ApiScenarioListItem[] }>;
+}
+
+export async function fetchSimulationScenario(
+  id: string,
+  lang: "ru" | "en",
+  step: number,
+): Promise<{ scenario: ApiScenarioUnion }> {
+  const r = await fetch(
+    apiPath(
+      `/api/v1/simulation/scenarios/${encodeURIComponent(id)}?lang=${lang}&step=${step}`,
+    ),
+    { cache: "no-store", headers: { "Accept-Language": lang } },
+  );
+  if (!r.ok) throw new Error(`scenario ${r.status}`);
+  const data = (await r.json()) as { scenario?: ApiScenarioUnion };
+  if (!data.scenario) throw new Error("empty scenario");
+  return { scenario: data.scenario };
+}
+
+export async function submitSimulationChoice(
+  scenarioId: string,
+  choiceId: string,
+  lang: "ru" | "en",
+  step: number,
+): Promise<SubmitResult> {
+  const r = await fetch(
+    apiPath(
+      `/api/v1/simulation/scenarios/${encodeURIComponent(scenarioId)}/submit?lang=${lang}`,
+    ),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept-Language": lang,
+      },
+      body: JSON.stringify({ choice_id: choiceId, step }),
+    },
+  );
+  return (await r.json()) as SubmitResult;
+}

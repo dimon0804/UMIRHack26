@@ -1,30 +1,18 @@
-FROM node:20-alpine AS deps
+# Build (Node 20 LTS — чаще кэшируется; см. README при ошибках pull с Docker Hub)
+FROM node:20-alpine AS build
 WORKDIR /app
-COPY package.json ./
-# legacy-peer-deps: стабильная установка при расхождении peer (Next/React ecosystem)
-RUN npm config set fetch-retries 5 \
-  && npm config set fetch-retry-maxtimeout 120000 \
-  && npm install --legacy-peer-deps --no-audit --no-fund
-
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json* ./
+RUN npm install
 COPY . .
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ENV NEXT_TELEMETRY_DISABLED=1
+ARG VITE_API_URL=
+ARG VITE_USE_GATEWAY=true
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_USE_GATEWAY=$VITE_USE_GATEWAY
 RUN npm run build
 
-FROM node:20-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-USER nextjs
-EXPOSE 3000
-ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
-CMD ["node", "server.js"]
+# Static
+FROM nginx:alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,0 +1,304 @@
+openapi: 3.0.3
+info:
+  title: Cipherline — API через Gateway
+  description: |
+    Единое описание публичных маршрутов за `API Gateway` (базовый URL, например `http://localhost:8000`).
+    Внутренние `/docs` отдельных сервисов дублируют детали; этот файл — для жюри и интеграций.
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8000
+    description: Локально (docker compose, gateway)
+
+tags:
+  - name: health
+  - name: auth
+  - name: simulation
+  - name: progress
+  - name: ai
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Состояние gateway
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: api-gateway }
+
+  /api/v1/health:
+    get:
+      tags: [health]
+      summary: Агрегированный health downstream-сервисов
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: Регистрация
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, locale]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                locale: { type: string, enum: [ru, en] }
+      responses:
+        "200":
+          description: Пара токенов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Вход
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Пара токенов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Обновление access по refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          description: Новая пара токенов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: Текущий пользователь
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Профиль
+        "401":
+          description: Нет или невалидный Bearer
+
+  /api/v1/simulation/scenarios:
+    get:
+      tags: [simulation]
+      summary: Список учебных модулей
+      parameters:
+        - in: query
+          name: lang
+          schema: { type: string, enum: [ru, en] }
+      responses:
+        "200":
+          description: Список сценариев и локаль
+
+  /api/v1/simulation/scenarios/{scenario_id}:
+    get:
+      tags: [simulation]
+      summary: Шаг сценария (почта / чат / Wi‑Fi / терминал / карточки)
+      parameters:
+        - in: path
+          name: scenario_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: step
+          schema: { type: integer, minimum: 1, maximum: 5, default: 1 }
+        - in: query
+          name: lang
+          schema: { type: string, enum: [ru, en] }
+      responses:
+        "200":
+          description: Контекст и варианты ответа
+        "404":
+          description: Сценарий не найден
+
+  /api/v1/simulation/scenarios/{scenario_id}/submit:
+    post:
+      tags: [simulation]
+      summary: Проверка выбора на шаге
+      parameters:
+        - in: path
+          name: scenario_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: lang
+          schema: { type: string, enum: [ru, en] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [choice_id]
+              properties:
+                choice_id: { type: string }
+                step: { type: integer, minimum: 1, maximum: 5, default: 1 }
+      responses:
+        "200":
+          description: Результат (верно/нет, последствия, подсказки)
+
+  /api/v1/progress/cipherline/state:
+    get:
+      tags: [progress]
+      summary: Загрузить сохранённое состояние игры
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Объект state (UserState)
+        "401":
+          description: Нет Bearer
+        "404":
+          description: Сохранений ещё нет
+
+    put:
+      tags: [progress]
+      summary: Сохранить полное состояние (поле login = email из токена)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Полный UserState (JSON)
+      responses:
+        "200":
+          description: ok
+        "400":
+          description: Нет login в теле
+        "403":
+          description: login не совпадает с email в JWT
+
+  /api/v1/progress/leaderboard:
+    get:
+      tags: [progress]
+      summary: Публичный лидерборд (маскированные имена)
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [xp, accuracy, modules]
+            default: xp
+      responses:
+        "200":
+          description: Таблица лидеров и total_players
+
+  /api/v1/progress/leaderboard/stats:
+    get:
+      tags: [progress]
+      summary: Агрегированная статистика по всем сохранённым профилям
+      responses:
+        "200":
+          description: Средние XP, распределение лиг и т.д.
+
+  /api/v1/progress/leaderboard/me:
+    get:
+      tags: [progress]
+      summary: Ранг текущего пользователя (нужен прогресс в БД)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: rank, total_players, entry
+        "401":
+          description: Нет Bearer
+
+  /api/v1/ai/chat:
+    post:
+      tags: [ai]
+      summary: Чат с LLM (Mistral / OpenAI-совместимый режим)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Ответ модели
+
+  /api/v1/ai/llm-config:
+    get:
+      tags: [ai]
+      summary: Диагностика конфигурации LLM (без секрета)
+      responses:
+        "200":
+          description: Режим, модель, флаг наличия ключа
+
+  /api/v1/ai/generate-scenario:
+    post:
+      tags: [ai]
+      summary: Генерация JSON-сценария почты/чата для тренажёра
+      responses:
+        "200":
+          description: Сценарий
+
+  /api/v1/ai/generate-track:
+    post:
+      tags: [ai]
+      summary: Генерация трека шагов для симуляции
+      responses:
+        "200":
+          description: Трек
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    TokenPair:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, example: bearer }

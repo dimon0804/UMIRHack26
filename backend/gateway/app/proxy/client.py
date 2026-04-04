@@ -1,3 +1,4 @@
+import json
 import logging
 from collections.abc import Mapping
 
@@ -47,14 +48,20 @@ async def forward_request(
             content=body if body else None,
             headers=headers,
             params=request.query_params.multi_items(),
-            timeout=httpx.Timeout(60.0),
+            timeout=httpx.Timeout(connect=20.0, read=180.0, write=60.0, pool=20.0),
         )
     except httpx.RequestError as e:
         log.warning("Upstream error: %s %s -> %s", request.method, url, e)
+        detail = (
+            "upstream_unavailable: "
+            f"{type(e).__name__}: {e!s}. "
+            "Проверьте, что целевой сервис запущен и AI_SERVICE_URL в gateway указывает на него."
+        )
+        body = json.dumps({"detail": detail}, ensure_ascii=False).encode("utf-8")
         return Response(
-            content=b'{"detail":"upstream_unavailable"}',
+            content=body,
             status_code=502,
-            media_type="application/json",
+            media_type="application/json; charset=utf-8",
         )
     ct = resp.headers.get("content-type", "application/json")
     return Response(content=resp.content, status_code=resp.status_code, media_type=ct)

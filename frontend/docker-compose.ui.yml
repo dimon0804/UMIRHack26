@@ -1,0 +1,19 @@
+# Только фронт (демо с localStorage, без бекенда).
+# Порт 3173 — чтобы не пересекаться с чужим приложением на :3000
+# Запуск: docker compose -f docker-compose.ui.yml up --build
+# Сайт: http://localhost:3173  |  Проверка: http://localhost:3173/__cipherline_health
+# Порт на всех интерфейсах (не только 127.0.0.1) — так реже бывает ERR_CONNECTION_REFUSED в Docker Desktop
+name: cipherline-ui
+
+services:
+  web:
+    container_name: cipherline-web
+    build:
+      context: .
+      args:
+        VITE_API_URL: ""
+    ports:
+      - "${CIPHERLINE_PORT:-3173}:80"
+    # Отдельный nginx без proxy на backend
+    volumes:
+      - ./docker/nginx-ui-only.conf:/etc/nginx/conf.d/default.conf:ro

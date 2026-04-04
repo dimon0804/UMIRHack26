@@ -24,11 +24,11 @@ docker compose up --build
 backend/
   gateway/           # API Gateway, прокси, CORS
   auth-service/      # Регистрация, логин, JWT access + refresh (PostgreSQL auth_db)
-  simulation-service/# Сценарии (заглушка + /health)
-  progress-service/  # Прогресс (заглушка + /health)
+  simulation-service/# Сценарии (почта, чат, Wi‑Fi, скимминг, выбор действия)
+  progress-service/  # Прогресс Cipherline + лидерборд (PostgreSQL)
   init-db/           # SQL создания БД per-service
-frontend/            # Next.js 14, Tailwind, тёмная/светлая тема, RU/EN
-docs/                # Архитектура, ER-диаграмма
+frontend/            # Vite + React, Tailwind, тёмная/светлая тема, RU/EN
+docs/                # Архитектура, ER, OpenAPI, Postman, OWASP/CWE/APWG
 ```
 
 ## API через шлюз
@@ -39,6 +39,13 @@ docs/                # Архитектура, ER-диаграмма
 | POST | `/api/v1/auth/login` | Вход |
 | POST | `/api/v1/auth/refresh` | Обновление пары токенов (`refresh_token`) |
 | GET | `/api/v1/auth/me` | Профиль (заголовок `Authorization: Bearer <access>`) |
+| GET | `/api/v1/simulation/scenarios` | Список модулей (`?lang=ru\|en`) |
+| GET | `/api/v1/simulation/scenarios/{id}` | Шаг сценария (`?step=1..5`) |
+| POST | `/api/v1/simulation/scenarios/{id}/submit` | Проверка ответа (`choice_id`, `step`) |
+| GET/PUT | `/api/v1/progress/cipherline/state` | Загрузка/сохранение прогресса (Bearer) |
+| GET | `/api/v1/progress/leaderboard` | Публичный лидерборд (`?sort=xp\|accuracy\|modules`) |
+| GET | `/api/v1/progress/leaderboard/stats` | Агрегированная статистика |
+| GET | `/api/v1/progress/leaderboard/me` | Ваш ранг (Bearer) |
 
 Ошибки содержат поля `code`, `message` (по `Accept-Language`: `ru` по умолчанию), `messages.ru` / `messages.en`.
 
@@ -70,7 +77,10 @@ git push -u origin feature/simulation-scenarios
 ## Документация
 
 - [Архитектура](docs/architecture.md)
-- [ER-диаграмма (auth)](docs/er-diagram.md)
+- [ER-диаграмма (auth + progress)](docs/er-diagram.md)
+- [OpenAPI через gateway (единый файл)](docs/openapi-cipherline-gateway.yaml) — можно открыть в [editor.swagger.io](https://editor.swagger.io/)
+- [Postman-коллекция](docs/postman/Cipherline-Gateway.postman_collection.json)
+- [Трассировка угроз: OWASP / CWE / APWG](docs/SECURITY_SOURCES.md)
 
 ## Лицензия
 

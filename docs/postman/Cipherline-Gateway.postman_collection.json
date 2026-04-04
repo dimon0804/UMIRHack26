@@ -1,0 +1,141 @@
+{
+  "info": {
+    "name": "Cipherline API (Gateway)",
+    "description": "Variable baseUrl = gateway URL, e.g. http://localhost:8000. Login request saves accessToken.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "accessToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Gateway health",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health" }
+        },
+        {
+          "name": "Aggregated health",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/health" }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"user@example.com\",\"password\":\"password123\",\"locale\":\"ru\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/register"
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var j = pm.response.json();",
+                  "if (j.access_token) pm.collectionVariables.set('accessToken', j.access_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"user@example.com\",\"password\":\"password123\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Simulation",
+      "item": [
+        {
+          "name": "List scenarios",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/simulation/scenarios?lang=ru" }
+        },
+        {
+          "name": "Get scenario step",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/simulation/scenarios/phishing-mail?step=1&lang=ru"
+          }
+        },
+        {
+          "name": "Submit choice",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"choice_id\":\"id-from-scenario\",\"step\":1}"
+            },
+            "url": "{{baseUrl}}/api/v1/simulation/scenarios/phishing-mail/submit?lang=ru"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Progress",
+      "item": [
+        {
+          "name": "Get cipherline state",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/v1/progress/cipherline/state"
+          }
+        },
+        {
+          "name": "Leaderboard",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/progress/leaderboard?limit=50&sort=xp" }
+        },
+        {
+          "name": "Leaderboard stats",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/progress/leaderboard/stats" }
+        },
+        {
+          "name": "My rank",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/v1/progress/leaderboard/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "LLM config",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/ai/llm-config" }
+        }
+      ]
+    }
+  ]
+}

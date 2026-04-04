@@ -10,10 +10,20 @@
 #   (например http://localhost:... из контейнера — localhost там это сам контейнер, не ваш ПК).
 # Исправление: mistral_sdk + api.mistral.ai ИЛИ для локального vLLM на хосте: http://host.docker.internal:ПОРТ
 
+# Gateway → ai-service: в Docker задаётся AI_SERVICE_URL=http://ai-service:8000 (см. docker-compose).
+# Ошибка upstream_unavailable: шлюз не достучался до ai-service (сервис не запущен, неверный URL или таймаут).
+# Локально без Docker: поднимите ai-service на порту, в .env для gateway укажите AI_SERVICE_URL=http://127.0.0.1:ПОРТ
+# и перезапустите gateway. Вызовы Mistral (generate-track) могут занимать до ~3 мин — таймаут прокси увеличен.
+
+# Экран «Сценарии» (7 треков × 5 шагов): POST /api/v1/ai/generate-track — Mistral, JSON крупнее → дольше ответ.
+#
 # Сценарии тренажёра (почта/чат): по умолчанию генерирует Mistral через ai-service.
 #   В Docker для simulation-service задано AI_SERVICE_URL=http://ai-service:8000
 #   Отключить LLM и оставить только хардкод: SIMULATION_LLM_SCENARIOS=false
 # Локально без Docker: задайте AI_SERVICE_URL=http://127.0.0.1:ПОРТ (где слушает ai-service),
 #   либо не задавайте URL — будут запасные статические сценарии.
 
-# Прочее: JWT_SECRET, POSTGRES_*, NEXT_PUBLIC_API_URL — см. docker-compose.yml
+# Frontend (Cipherline, Vite): в Docker nginx проксирует /api → gateway:8000; сборка с VITE_USE_GATEWAY=true.
+# Локально с gateway: в frontend/.env.local задайте VITE_USE_GATEWAY=true и npm run dev — прокси /api на 127.0.0.1:8000 (vite.config).
+# Без переменных — демо-режим (логин/регистрация только в localStorage браузера).
+# Прочее: JWT_SECRET, POSTGRES_* — см. docker-compose.yml

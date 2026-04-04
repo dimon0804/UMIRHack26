@@ -1,0 +1,13 @@
+# Запуск без nginx: Node отдаёт собранный фронт (Vite preview).
+# docker compose -f docker-compose.preview.yml up --build
+# Браузер: http://localhost:4173
+name: cipherline-preview
+
+services:
+  web:
+    container_name: cipherline-preview
+    build:
+      context: .
+      dockerfile: Dockerfile.preview
+    ports:
+      - "${CIPHERLINE_PREVIEW_PORT:-4173}:4173"

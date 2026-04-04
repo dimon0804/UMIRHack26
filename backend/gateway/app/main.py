@@ -16,9 +16,10 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Длинные ответы Mistral (generate-track, chat) — не обрывать на 60 с
     app.state.http_client = httpx.AsyncClient(
         limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
-        timeout=httpx.Timeout(60.0),
+        timeout=httpx.Timeout(connect=20.0, read=180.0, write=60.0, pool=20.0),
     )
     log.info("HTTP client started")
     yield

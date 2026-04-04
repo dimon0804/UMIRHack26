@@ -1,0 +1,33 @@
+# Уникальное имя — иначе папка `front` из другого проекта даст те же контейнеры и «старый» сайт
+name: cipherline-front
+
+services:
+  frontend:
+    container_name: cipherline-frontend
+    build:
+      context: .
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+    ports:
+      - "${FRONTEND_PORT:-3173}:80"
+    depends_on:
+      - backend
+    environment:
+      - NGINX_HOST=localhost
+    networks:
+      - cg_net
+
+  backend:
+    image: nginx:alpine
+    container_name: cg-backend-placeholder
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - ./docker/backend-placeholder.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - cg_net
+    # Замените сервис `backend` на ваш API (Spring, FastAPI и т.д.), сохранив прокси в frontend/nginx.conf
+
+networks:
+  cg_net:
+    driver: bridge

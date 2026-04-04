@@ -1,22 +1,55 @@
-"""Сценарии тренажёра: две вкладки (почта, чат); контент — Mistral через ai-service, иначе запасной хардкод."""
+"""Сценарии: 5 модулей × 5 уровней, почта/чат (Mistral на 1-м шаге), Wi‑Fi, скимминг, выбор действия."""
 
 from __future__ import annotations
 
-import random
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from app.scenario_narrative import (
+    AGG_ACTION,
+    AGG_SKIM,
+    NARRATIVE_TOTAL_STEPS,
+    outcome_action,
+    outcome_skimming,
+    scenario_action_cards,
+    scenario_skimming,
+)
 from app.services.scenario_llm_client import fetch_llm_scenario
 
 router = APIRouter(prefix="/scenarios", tags=["simulator"])
 
 Locale = Literal["ru", "en"]
 
-# Одна вкладка в UI; submit идёт на эти id
+# Агрегаты в UI; submit идёт на эти id
 AGGREGATE_MAIL_ID = "phishing-mail"
 AGGREGATE_CHAT_ID = "se-chat"
+AGGREGATE_WIFI_ID = "wifi"
+AGGREGATE_SKIMMING_ID = AGG_SKIM
+AGGREGATE_ACTION_ID = AGG_ACTION
+
+_HOME_STEP_TEMPLATE: tuple[str, ...] = (
+    "phishing-mail-bank",
+    "phishing-mail-parcel",
+    "phishing-mail-payroll",
+    "phishing-mail-parcel",
+    "phishing-mail-bank",
+)
+_OFFICE_STEP_TEMPLATE: tuple[str, ...] = (
+    "se-chat-gifts",
+    "se-chat-wire",
+    "se-chat-it",
+    "se-chat-wire",
+    "se-chat-gifts",
+)
+_WIFI_STEP_TEMPLATE: tuple[str, ...] = (
+    "wifi-cafe",
+    "wifi-airport",
+    "wifi-hotel",
+    "wifi-airport",
+    "wifi-cafe",
+)
 
 # Старый алиас мессенджера → общая вкладка «чат»
 SCENARIO_ALIASES: dict[str, str] = {
@@ -35,45 +68,169 @@ CHAT_SCENARIO_IDS: tuple[str, ...] = (
     "se-chat-it",
 )
 
+WIFI_SCENARIO_IDS: tuple[str, ...] = (
+    "wifi-cafe",
+    "wifi-airport",
+    "wifi-hotel",
+)
+
 
 def _canonical_id(scenario_id: str) -> str:
     return SCENARIO_ALIASES.get(scenario_id, scenario_id)
 
 
-async def _scenario_for_get(scenario_id: str, locale: Locale) -> dict | None:
-    """GET: для вкладок почта/чат — сначала Mistral; иначе случайный заранее прописанный вариант."""
+def _clamp_step(step: int) -> int:
+    return max(1, min(NARRATIVE_TOTAL_STEPS, step))
+
+
+def _home_arc(locale: Locale, step: int) -> str:
+    if locale == "en":
+        return [
+            "Home 1/5: phishing posing as your bank",
+            "Home 2/5: parcel scam and fake fees",
+            "Home 3/5: payroll / HR data-harvest link",
+            "Home 4/5: password reuse after a leak (credential stuffing risk)",
+            "Home 5/5: smishing-style urgency tied to your accounts",
+        ][step - 1]
+    return [
+        "Дом 1/5: фишинг под банк",
+        "Дом 2/5: мошенничество с «посылкой» и сбором",
+        "Дом 3/5: фишинг HR / зарплатные реквизиты",
+        "Дом 4/5: риск подбора пароля после утечки",
+        "Дом 5/5: срочность в духе смсинга про счета",
+    ][step - 1]
+
+
+def _office_arc(locale: Locale, step: int) -> str:
+    if locale == "en":
+        return [
+            "Office 1/5: BEC — gift cards under pressure",
+            "Office 2/5: fake urgent wire from “exec”",
+            "Office 3/5: impersonated IT asking for passwords",
+            "Office 4/5: finance pretext and out-of-band payment",
+            "Office 5/5: social engineering pivot after earlier red flags",
+        ][step - 1]
+    return [
+        "Офис 1/5: BEC — подарочные карты под давлением",
+        "Офис 2/5: фальшивый срочный перевод от «руководства»",
+        "Офис 3/5: поддельный IT с запросом пароля",
+        "Офис 4/5: претекстинг финансов и обход каналов",
+        "Офис 5/5: развитие сюжета социнженерии",
+    ][step - 1]
+
+
+def _wifi_arc(locale: Locale, step: int) -> str:
+    if locale == "en":
+        return [
+            "Public Wi‑Fi 1/5: café networks",
+            "Public Wi‑Fi 2/5: airport lounge hotspots",
+            "Public Wi‑Fi 3/5: hotel lobby evil-twin risk",
+            "Public Wi‑Fi 4/5: rogue AP in transit hubs",
+            "Public Wi‑Fi 5/5: tying the arc — verify before you connect",
+        ][step - 1]
+    return [
+        "Wi‑Fi 1/5: кофейня и выбор сети",
+        "Wi‑Fi 2/5: аэропорт",
+        "Wi‑Fi 3/5: отель и дубликаты SSID",
+        "Wi‑Fi 4/5: поддельные точки в транспортных узлах",
+        "Wi‑Fi 5/5: финал — проверка перед подключением",
+    ][step - 1]
+
+
+def _home_attack(step: int) -> str:
+    return ("phishing", "phishing", "phishing", "password_attack", "smishing")[step - 1]
+
+
+def _office_attack(step: int) -> str:
+    return ("social_engineering", "social_engineering", "social_engineering", "pretexting", "social_engineering")[
+        step - 1
+    ]
+
+
+def _wifi_attack(step: int) -> str:
+    return ("evil_twin", "rogue_ap", "evil_twin", "mitm", "wifi_security")[step - 1]
+
+
+async def _scenario_for_get(scenario_id: str, locale: Locale, step: int = 1) -> dict | None:
+    """GET сценария для шага step (1..5); почта/чат — Mistral только на шаге 1."""
     sid = _canonical_id(scenario_id)
+    step = _clamp_step(step)
 
     if sid == AGGREGATE_MAIL_ID:
-        llm = await fetch_llm_scenario(
-            aggregate_id=AGGREGATE_MAIL_ID,
-            scenario_type="email",
-            locale=locale,
-        )
-        if llm:
-            return llm
-        pick = random.choice(MAIL_SCENARIO_IDS)
-        base = _scenario_by_id(pick, locale)
+        if step == 1:
+            llm = await fetch_llm_scenario(
+                aggregate_id=AGGREGATE_MAIL_ID,
+                scenario_type="email",
+                locale=locale,
+            )
+            if llm:
+                out = dict(llm)
+                out["id"] = AGGREGATE_MAIL_ID
+                out["step"] = 1
+                out["total_steps"] = NARRATIVE_TOTAL_STEPS
+                out["narrative_arc"] = _home_arc(locale, 1)
+                out["attack_family"] = _home_attack(1)
+                return out
+        tid = _HOME_STEP_TEMPLATE[step - 1]
+        base = _scenario_by_id(tid, locale)
         if not base:
             return None
         out = dict(base)
         out["id"] = AGGREGATE_MAIL_ID
+        out["step"] = step
+        out["total_steps"] = NARRATIVE_TOTAL_STEPS
+        out["narrative_arc"] = _home_arc(locale, step)
+        out["attack_family"] = _home_attack(step)
         return out
 
     if sid == AGGREGATE_CHAT_ID:
-        llm = await fetch_llm_scenario(
-            aggregate_id=AGGREGATE_CHAT_ID,
-            scenario_type="chat",
-            locale=locale,
-        )
-        if llm:
-            return llm
-        pick = random.choice(CHAT_SCENARIO_IDS)
-        base = _scenario_by_id(pick, locale)
+        if step == 1:
+            llm = await fetch_llm_scenario(
+                aggregate_id=AGGREGATE_CHAT_ID,
+                scenario_type="chat",
+                locale=locale,
+            )
+            if llm:
+                out = dict(llm)
+                out["id"] = AGGREGATE_CHAT_ID
+                out["step"] = 1
+                out["total_steps"] = NARRATIVE_TOTAL_STEPS
+                out["narrative_arc"] = _office_arc(locale, 1)
+                out["attack_family"] = _office_attack(1)
+                return out
+        tid = _OFFICE_STEP_TEMPLATE[step - 1]
+        base = _scenario_by_id(tid, locale)
         if not base:
             return None
         out = dict(base)
         out["id"] = AGGREGATE_CHAT_ID
+        out["step"] = step
+        out["total_steps"] = NARRATIVE_TOTAL_STEPS
+        out["narrative_arc"] = _office_arc(locale, step)
+        out["attack_family"] = _office_attack(step)
+        return out
+
+    if sid == AGGREGATE_WIFI_ID:
+        tid = _WIFI_STEP_TEMPLATE[step - 1]
+        base = _scenario_by_id(tid, locale)
+        if not base:
+            return None
+        out = dict(base)
+        out["id"] = AGGREGATE_WIFI_ID
+        out["step"] = step
+        out["total_steps"] = NARRATIVE_TOTAL_STEPS
+        out["narrative_arc"] = _wifi_arc(locale, step)
+        out["attack_family"] = _wifi_attack(step)
+        return out
+
+    if sid == AGGREGATE_SKIMMING_ID:
+        out = scenario_skimming(locale, step)
+        out["id"] = AGGREGATE_SKIMMING_ID
+        return out
+
+    if sid == AGGREGATE_ACTION_ID:
+        out = scenario_action_cards(locale, step)
+        out["id"] = AGGREGATE_ACTION_ID
         return out
 
     return _scenario_by_id(sid, locale)
@@ -89,6 +246,7 @@ class ChoiceOutcome(BaseModel):
     teach_body: str
     show_consequences: bool
     consequence_steps: list[dict[str, str]] = Field(default_factory=list)
+    hint: str | None = None
 
 
 def _outcomes_mail(locale: Locale) -> dict[str, ChoiceOutcome]:
@@ -153,6 +311,20 @@ def _outcomes_mail(locale: Locale) -> dict[str, ChoiceOutcome]:
                 show_consequences=False,
                 consequence_steps=[],
             ),
+            "escalate_soc": ChoiceOutcome(
+                choice_id="escalate_soc",
+                is_safe=True,
+                severity="none",
+                security_delta=23,
+                xp_delta=17,
+                teach_title="Escalate early",
+                teach_body=(
+                    "Forwarding or escalating suspicious mail to SOC/IT helps correlate campaigns and update filters "
+                    "before others click."
+                ),
+                show_consequences=False,
+                consequence_steps=[],
+            ),
         }
     return {
         "open_link": ChoiceOutcome(
@@ -210,6 +382,20 @@ def _outcomes_mail(locale: Locale) -> dict[str, ChoiceOutcome]:
             teach_title="Лучшая практика",
             teach_body=(
                 "Репорт обучает фильтры и SOC. Вместе с проверкой отправителя это сильнее всего снижает риск."
+            ),
+            show_consequences=False,
+            consequence_steps=[],
+        ),
+        "escalate_soc": ChoiceOutcome(
+            choice_id="escalate_soc",
+            is_safe=True,
+            severity="none",
+            security_delta=23,
+            xp_delta=17,
+            teach_title="Ранняя эскалация",
+            teach_body=(
+                "Пересылка или эскалация подозрительного письма в SOC/ИБ помогает связать кампании и обновить фильтры, "
+                "пока коллеги не кликнули."
             ),
             show_consequences=False,
             consequence_steps=[],
@@ -277,6 +463,20 @@ def _outcomes_chat(locale: Locale) -> dict[str, ChoiceOutcome]:
                 show_consequences=False,
                 consequence_steps=[],
             ),
+            "escalate_soc": ChoiceOutcome(
+                choice_id="escalate_soc",
+                is_safe=True,
+                severity="none",
+                security_delta=24,
+                xp_delta=19,
+                teach_title="Report the thread",
+                teach_body=(
+                    "SOC can block senders, revoke sessions, and warn peers. Reporting suspicious DMs is as important "
+                    "as reporting phishing mail."
+                ),
+                show_consequences=False,
+                consequence_steps=[],
+            ),
         }
     return {
         "send_codes": ChoiceOutcome(
@@ -336,7 +536,201 @@ def _outcomes_chat(locale: Locale) -> dict[str, ChoiceOutcome]:
             show_consequences=False,
             consequence_steps=[],
         ),
+        "escalate_soc": ChoiceOutcome(
+            choice_id="escalate_soc",
+            is_safe=True,
+            severity="none",
+            security_delta=24,
+            xp_delta=19,
+            teach_title="Сообщить в SOC",
+            teach_body=(
+                "SOC может заблокировать отправителя, отозвать сессии и предупредить коллег. Подозрительный DM важно "
+                "репортить так же, как фишинговое письмо."
+            ),
+            show_consequences=False,
+            consequence_steps=[],
+        ),
     }
+
+
+def _outcomes_wifi(locale: Locale) -> dict[str, ChoiceOutcome]:
+    if locale == "en":
+        return {
+            "join_open": ChoiceOutcome(
+                choice_id="join_open",
+                is_safe=False,
+                severity="critical",
+                security_delta=-32,
+                xp_delta=-18,
+                teach_title="Open Wi‑Fi risk",
+                teach_body=(
+                    "Unencrypted traffic can be sniffed or tampered with (captive portals, DNS, MITM). "
+                    "Prefer a network where you verified encryption and credentials with staff."
+                ),
+                show_consequences=True,
+                consequence_steps=[
+                    {"title": "Session hijack", "detail": "Cookies and tokens were read from plain HTTP."},
+                    {"title": "Credential theft", "detail": "A fake login page harvested passwords."},
+                    {"title": "Malware injection", "detail": "Downloads or updates could be swapped in transit."},
+                ],
+            ),
+            "install_portal_offer": ChoiceOutcome(
+                choice_id="install_portal_offer",
+                is_safe=False,
+                severity="critical",
+                security_delta=-38,
+                xp_delta=-22,
+                teach_title="Do not install from captive pages",
+                teach_body=(
+                    "“Speed boosters”, VPNs and unknown profiles pushed on hotspot pages are a common malware vector. "
+                    "Use official app stores and corporate VPN if required."
+                ),
+                show_consequences=True,
+                consequence_steps=[
+                    {"title": "Device compromised", "detail": "The app gained broad permissions or a profile."},
+                    {"title": "Data exfiltration", "detail": "Contacts, SMS, or work mail were accessed."},
+                ],
+            ),
+            "connect_strongest_unverified": ChoiceOutcome(
+                choice_id="connect_strongest_unverified",
+                is_safe=False,
+                severity="medium",
+                security_delta=-18,
+                xp_delta=-10,
+                teach_title="Evil twin SSID",
+                teach_body=(
+                    "Attackers clone popular names with a strong signal. Always match the SSID and password source "
+                    "with venue staff or official signage — not only signal bars."
+                ),
+                show_consequences=False,
+                consequence_steps=[],
+            ),
+            "use_verified_encrypted": ChoiceOutcome(
+                choice_id="use_verified_encrypted",
+                is_safe=True,
+                severity="none",
+                security_delta=24,
+                xp_delta=18,
+                teach_title="Verified encrypted network",
+                teach_body=(
+                    "Asking staff for the guest SSID and passphrase (or using a known WPA2/WPA3 network) cuts MITM risk. "
+                    "Still avoid sensitive logins without VPN where policy requires it."
+                ),
+                show_consequences=False,
+                consequence_steps=[],
+            ),
+            "report_suspicious_ssid": ChoiceOutcome(
+                choice_id="report_suspicious_ssid",
+                is_safe=True,
+                severity="none",
+                security_delta=22,
+                xp_delta=16,
+                teach_title="Report duplicates",
+                teach_body=(
+                    "Telling staff or security about a suspicious duplicate network helps protect other visitors "
+                    "and may trigger an incident response."
+                ),
+                show_consequences=False,
+                consequence_steps=[],
+            ),
+        }
+    return {
+        "join_open": ChoiceOutcome(
+            choice_id="join_open",
+            is_safe=False,
+            severity="critical",
+            security_delta=-32,
+            xp_delta=-18,
+            teach_title="Риск открытой сети",
+            teach_body=(
+                "В незашифрованной сети трафик могут прослушивать и подменять (captive portal, DNS, MITM). "
+                "Предпочитайте сеть, где вы подтвердили шифрование и пароль у персонала."
+            ),
+            show_consequences=True,
+            consequence_steps=[
+                {"title": "Перехват сессии", "detail": "По HTTP прочитали cookie и токены."},
+                {"title": "Кража паролей", "detail": "Поддельная страница входа собрала учётные данные."},
+                {"title": "Вредонос", "detail": "Подменили загрузки или обновления по пути."},
+            ],
+        ),
+        "install_portal_offer": ChoiceOutcome(
+            choice_id="install_portal_offer",
+            is_safe=False,
+            severity="critical",
+            security_delta=-38,
+            xp_delta=-22,
+            teach_title="Не ставьте ПО со страницы входа",
+            teach_body=(
+                "«Ускорители», VPN и неизвестные профили на странице хот-спота — частый вектор вредоносов. "
+                "Используйте официальные магазины приложений и корпоративный VPN по политике."
+            ),
+            show_consequences=True,
+            consequence_steps=[
+                {"title": "Компрометация устройства", "detail": "Приложение или профиль получили широкие права."},
+                {"title": "Утечка данных", "detail": "Доступ к контактам, SMS или рабочей почте."},
+            ],
+        ),
+        "connect_strongest_unverified": ChoiceOutcome(
+            choice_id="connect_strongest_unverified",
+            is_safe=False,
+            severity="medium",
+            security_delta=-18,
+            xp_delta=-10,
+            teach_title="Evil twin по имени SSID",
+            teach_body=(
+                "Злоумышленники клонируют популярные имена с сильным сигналом. Сверяйте SSID и источник пароля "
+                "с персоналом или официальными указателями — не только по уровню сигнала."
+            ),
+            show_consequences=False,
+            consequence_steps=[],
+        ),
+        "use_verified_encrypted": ChoiceOutcome(
+            choice_id="use_verified_encrypted",
+            is_safe=True,
+            severity="none",
+            security_delta=24,
+            xp_delta=18,
+            teach_title="Проверенная зашифрованная сеть",
+            teach_body=(
+                "Уточнить у персонала гостевой SSID и пароль (или известную WPA2/WPA3 сеть) снижает риск MITM. "
+                "Чувствительные входы — только с VPN, если так требует политика."
+            ),
+            show_consequences=False,
+            consequence_steps=[],
+        ),
+        "report_suspicious_ssid": ChoiceOutcome(
+            choice_id="report_suspicious_ssid",
+            is_safe=True,
+            severity="none",
+            security_delta=22,
+            xp_delta=16,
+            teach_title="Сообщить о дубликате",
+            teach_body=(
+                "Сообщить персоналу или охране о подозрительной «копии» сети защищает других посетителей "
+                "и может запустить реагирование."
+            ),
+            show_consequences=False,
+            consequence_steps=[],
+        ),
+    }
+
+
+def _choices_wifi(locale: Locale) -> list[dict[str, str]]:
+    if locale == "en":
+        return [
+            {"id": "join_open", "label": "Connect to the open network — fastest"},
+            {"id": "install_portal_offer", "label": "Install the “Wi‑Fi booster” from the login page"},
+            {"id": "connect_strongest_unverified", "label": "Pick the strongest signal without checking the name"},
+            {"id": "use_verified_encrypted", "label": "Ask staff and use the official guest / encrypted network"},
+            {"id": "report_suspicious_ssid", "label": "Tell staff security about a suspicious duplicate SSID"},
+        ]
+    return [
+        {"id": "join_open", "label": "Подключиться к открытой сети — быстрее всего"},
+        {"id": "install_portal_offer", "label": "Установить «ускоритель Wi‑Fi» со страницы входа"},
+        {"id": "connect_strongest_unverified", "label": "Взять самый сильный сигнал без проверки имени"},
+        {"id": "use_verified_encrypted", "label": "Спросить персонал и подключиться к официальной гостевой / с шифрованием"},
+        {"id": "report_suspicious_ssid", "label": "Сообщить охране/администратору о подозрительном дубликате SSID"},
+    ]
 
 
 def _choices_mail(locale: Locale) -> list[dict[str, str]]:
@@ -346,12 +740,14 @@ def _choices_mail(locale: Locale) -> list[dict[str, str]]:
             {"id": "delete_only", "label": "Delete email"},
             {"id": "verify_sender", "label": "Check sender details"},
             {"id": "report", "label": "Report phishing"},
+            {"id": "escalate_soc", "label": "Escalate to SOC / IT security"},
         ]
     return [
         {"id": "open_link", "label": "Открыть ссылку"},
         {"id": "delete_only", "label": "Удалить письмо"},
         {"id": "verify_sender", "label": "Проверить отправителя"},
         {"id": "report", "label": "Сообщить о фишинге"},
+        {"id": "escalate_soc", "label": "Передать в SOC / ИБ"},
     ]
 
 
@@ -362,12 +758,14 @@ def _choices_chat_gifts(locale: Locale) -> list[dict[str, str]]:
             {"id": "callback", "label": "Call back on a known number"},
             {"id": "official_channel", "label": "Ask to use official procurement"},
             {"id": "ignore", "label": "Ignore for now"},
+            {"id": "escalate_soc", "label": "Report thread to security / SOC"},
         ]
     return [
         {"id": "send_codes", "label": "Отправить коды сейчас"},
         {"id": "callback", "label": "Перезвонить на известный номер"},
         {"id": "official_channel", "label": "Попросить оформить через закупки"},
         {"id": "ignore", "label": "Пока не отвечать"},
+        {"id": "escalate_soc", "label": "Сообщить в ИБ / SOC"},
     ]
 
 
@@ -378,12 +776,14 @@ def _choices_chat_wire(locale: Locale) -> list[dict[str, str]]:
             {"id": "callback", "label": "Call finance / manager on a known line"},
             {"id": "official_channel", "label": "Open a ticket in the banking portal"},
             {"id": "ignore", "label": "Ignore until verified"},
+            {"id": "escalate_soc", "label": "Report thread to security / SOC"},
         ]
     return [
         {"id": "send_codes", "label": "Срочно перевести по реквизитам"},
         {"id": "callback", "label": "Позвонить в финансы / руководителю"},
         {"id": "official_channel", "label": "Оформить через корпоративный портал / тикет"},
         {"id": "ignore", "label": "Не реагировать до проверки"},
+        {"id": "escalate_soc", "label": "Сообщить в ИБ / SOC"},
     ]
 
 
@@ -394,12 +794,14 @@ def _choices_chat_it(locale: Locale) -> list[dict[str, str]]:
             {"id": "callback", "label": "Call IT on the internal directory number"},
             {"id": "official_channel", "label": "Open a ticket in the service desk"},
             {"id": "ignore", "label": "Ignore — IT never asks for passwords"},
+            {"id": "escalate_soc", "label": "Report thread to security / SOC"},
         ]
     return [
         {"id": "send_codes", "label": "Написать пароль в чат"},
         {"id": "callback", "label": "Позвонить в IT по внутреннему номеру"},
         {"id": "official_channel", "label": "Создать тикет в service desk"},
         {"id": "ignore", "label": "Игнор — IT не просит пароли в чате"},
+        {"id": "escalate_soc", "label": "Сообщить в ИБ / SOC"},
     ]
 
 
@@ -638,11 +1040,144 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
             "choices": _choices_chat_it(locale),
         }
 
+    if sid == "wifi-cafe":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "wifi",
+                "title": "Coffee shop — two networks",
+                "context": (
+                    "You need internet for a short call. Two networks appear: an open one and a password-protected "
+                    "guest network that matches what the barista wrote on the counter card."
+                ),
+                "networks": [
+                    {
+                        "ssid": "StarCoffee_Free",
+                        "secured": False,
+                        "note": "No password — anyone nearby can listen.",
+                    },
+                    {
+                        "ssid": "StarCoffee_Guest",
+                        "secured": True,
+                        "note": "WPA2/WPA3 — passphrase from staff.",
+                    },
+                ],
+                "choices": _choices_wifi(locale),
+            }
+        return {
+            "id": sid,
+            "type": "wifi",
+            "title": "Кофейня — две сети",
+            "context": (
+                "Нужен интернет на короткий звонок. Видны две сети: открытая и гостевая с паролем, как на стикере у бариста."
+            ),
+            "networks": [
+                {
+                    "ssid": "StarCoffee_Free",
+                    "secured": False,
+                    "note": "Без пароля — рядом могут прослушивать трафик.",
+                },
+                {
+                    "ssid": "StarCoffee_Guest",
+                    "secured": True,
+                    "note": "WPA2/WPA3 — пароль выдали на стойке.",
+                },
+            ],
+            "choices": _choices_wifi(locale),
+        }
+
+    if sid == "wifi-airport":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "wifi",
+                "title": "Airport lounge Wi‑Fi",
+                "context": (
+                    "Before boarding you see “Airport_Free_WiFi” (open) and “Airport_Secure_Guest” on the info screen "
+                    "next to the lounge desk with a QR and passphrase."
+                ),
+                "networks": [
+                    {"ssid": "Airport_Free_WiFi", "secured": False, "note": "Open — high risk of rogue APs."},
+                    {
+                        "ssid": "Airport_Secure_Guest",
+                        "secured": True,
+                        "note": "Matches airport signage; WPA2/WPA3.",
+                    },
+                ],
+                "choices": _choices_wifi(locale),
+            }
+        return {
+            "id": sid,
+            "type": "wifi",
+            "title": "Wi‑Fi в зале ожидания",
+            "context": (
+                "Перед посадкой видны «Airport_Free_WiFi» (открытая) и «Airport_Secure_Guest» на экране у стойки "
+                "информации с QR и паролем."
+            ),
+            "networks": [
+                {"ssid": "Airport_Free_WiFi", "secured": False, "note": "Открытая — выше риск поддельных точек."},
+                {
+                    "ssid": "Airport_Secure_Guest",
+                    "secured": True,
+                    "note": "Совпадает с указателями аэропорта; WPA2/WPA3.",
+                },
+            ],
+            "choices": _choices_wifi(locale),
+        }
+
+    if sid == "wifi-hotel":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "wifi",
+                "title": "Hotel lobby hotspot",
+                "context": (
+                    "Check-in slip lists “GrandHotel_Guest” with a passphrase. You also see “GrandHotel_LOBBY_FREE” "
+                    "with a very strong signal."
+                ),
+                "networks": [
+                    {
+                        "ssid": "GrandHotel_Guest",
+                        "secured": True,
+                        "note": "Printed on your keycard envelope.",
+                    },
+                    {
+                        "ssid": "GrandHotel_LOBBY_FREE",
+                        "secured": False,
+                        "note": "Name looks official but is not on your welcome pack.",
+                    },
+                ],
+                "choices": _choices_wifi(locale),
+            }
+        return {
+            "id": sid,
+            "type": "wifi",
+            "title": "Wi‑Fi в отеле",
+            "context": (
+                "В конверте с картой указаны «GrandHotel_Guest» и пароль. Рядом в списке — «GrandHotel_LOBBY_FREE» "
+                "с очень сильным сигналом."
+            ),
+            "networks": [
+                {
+                    "ssid": "GrandHotel_Guest",
+                    "secured": True,
+                    "note": "Указано на конверте с ключ-картой.",
+                },
+                {
+                    "ssid": "GrandHotel_LOBBY_FREE",
+                    "secured": False,
+                    "note": "Похоже на официальное имя, но его нет в приветственном пакете.",
+                },
+            ],
+            "choices": _choices_wifi(locale),
+        }
+
     return None
 
 
 class SubmitChoiceBody(BaseModel):
     choice_id: str
+    step: int = Field(1, ge=1, le=NARRATIVE_TOTAL_STEPS)
 
 
 def _locale_from_request(request: Request, lang: str | None) -> Locale:
@@ -655,15 +1190,21 @@ def _locale_from_request(request: Request, lang: str | None) -> Locale:
 
 
 def _list_entries(locale: Locale) -> list[dict[str, str]]:
-    """Две вкладки: почта и чат (конкретная ситуация подставляется при GET)."""
+    """Пять модулей, в каждом 5 уровней (шагов)."""
     if locale == "en":
         return [
-            {"id": AGGREGATE_MAIL_ID, "type": "email", "title": "Inbox — phishing"},
-            {"id": AGGREGATE_CHAT_ID, "type": "chat", "title": "Messenger — social engineering"},
+            {"id": AGGREGATE_MAIL_ID, "type": "email", "title": "Home — personal email & phone"},
+            {"id": AGGREGATE_CHAT_ID, "type": "chat", "title": "Office — messenger & corporate requests"},
+            {"id": AGGREGATE_WIFI_ID, "type": "wifi", "title": "Public Wi‑Fi"},
+            {"id": AGGREGATE_SKIMMING_ID, "type": "terminal", "title": "Skimming & payment terminals"},
+            {"id": AGGREGATE_ACTION_ID, "type": "action_cards", "title": "Action choice — incidents"},
         ]
     return [
-        {"id": AGGREGATE_MAIL_ID, "type": "email", "title": "Почта — фишинг"},
-        {"id": AGGREGATE_CHAT_ID, "type": "chat", "title": "Чат — социальная инженерия"},
+        {"id": AGGREGATE_MAIL_ID, "type": "email", "title": "Дом — личная почта и смартфон"},
+        {"id": AGGREGATE_CHAT_ID, "type": "chat", "title": "Офис — мессенджер и корпоративные запросы"},
+        {"id": AGGREGATE_WIFI_ID, "type": "wifi", "title": "Общественный Wi‑Fi"},
+        {"id": AGGREGATE_SKIMMING_ID, "type": "terminal", "title": "Скимминг и платёжные терминалы"},
+        {"id": AGGREGATE_ACTION_ID, "type": "action_cards", "title": "Выбор действия — инциденты"},
     ]
 
 
@@ -684,9 +1225,10 @@ async def get_scenario(
     scenario_id: str,
     request: Request,
     lang: str | None = Query(default=None),
+    step: int = Query(1, ge=1, le=NARRATIVE_TOTAL_STEPS, description="Уровень 1..5"),
 ) -> dict:
     locale = _locale_from_request(request, lang)
-    scenario = await _scenario_for_get(scenario_id, locale)
+    scenario = await _scenario_for_get(scenario_id, locale, step)
     if not scenario:
         raise HTTPException(status_code=404, detail="scenario_not_found")
     return {"locale": locale, "scenario": scenario}
@@ -701,11 +1243,26 @@ async def submit_choice(
 ) -> dict:
     locale = _locale_from_request(request, lang)
     sid = _canonical_id(scenario_id)
+    st = _clamp_step(body.step)
+
+    if sid == AGGREGATE_SKIMMING_ID:
+        raw = outcome_skimming(locale, st, body.choice_id)
+        if not raw:
+            return {"ok": False, "error": "unknown_choice", "locale": locale}
+        return {"ok": True, "locale": locale, "result": ChoiceOutcome(**raw).model_dump()}
+
+    if sid == AGGREGATE_ACTION_ID:
+        raw = outcome_action(locale, st, body.choice_id)
+        if not raw:
+            return {"ok": False, "error": "unknown_choice", "locale": locale}
+        return {"ok": True, "locale": locale, "result": ChoiceOutcome(**raw).model_dump()}
 
     if sid == AGGREGATE_MAIL_ID or sid in MAIL_SCENARIO_IDS:
         outcomes = _outcomes_mail(locale)
     elif sid == AGGREGATE_CHAT_ID or sid in CHAT_SCENARIO_IDS:
         outcomes = _outcomes_chat(locale)
+    elif sid == AGGREGATE_WIFI_ID or sid in WIFI_SCENARIO_IDS:
+        outcomes = _outcomes_wifi(locale)
     else:
         raise HTTPException(status_code=404, detail="scenario_not_found")
 
