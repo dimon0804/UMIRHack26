@@ -10,5 +10,8 @@ class Settings(BaseSettings):
     simulation_llm_scenarios: bool = True
     """Если true и задан ai_service_url — сценарии для вкладок почта/чат генерирует Mistral."""
 
+    progress_service_url: str = ""
+    """Базовый URL progress-service для пользовательских AI-кейсов (cs-mail-*/cs-chat-*)."""
+
 
 settings = Settings()

@@ -135,6 +135,9 @@ paths:
     get:
       tags: [simulation]
       summary: Шаг сценария (почта / чат / Wi‑Fi / терминал / карточки)
+      description: |
+        Для пользовательских AI-кейсов `scenario_id` вида `cs-mail-{uuid}` или `cs-chat-{uuid}` нужен заголовок
+        **Authorization: Bearer** (тот же access-токен); simulation-service подгружает тело из progress-service.
       parameters:
         - in: path
           name: scenario_id
@@ -211,6 +214,73 @@ paths:
           description: Нет login в теле
         "403":
           description: login не совпадает с email в JWT
+
+  /api/v1/progress/custom-scenarios:
+    get:
+      tags: [progress]
+      summary: Список сохранённых пользовательских кейсов (каталог на дашборде)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: items — id (cs-mail-… / cs-chat-…), type, title, created_at
+        "401":
+          description: Нет Bearer
+    post:
+      tags: [progress]
+      summary: Добавить кейс в каталог (поле scenario — JSON из POST /api/v1/ai/generate-scenario)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scenario]
+              properties:
+                scenario:
+                  type: object
+                  description: Объект сценария type email|chat и фиксированными choice_id
+      responses:
+        "200":
+          description: id, type, title
+        "400":
+          description: Валидация / лимит кейсов на пользователя
+
+  /api/v1/progress/custom-scenarios/{scenario_id}/payload:
+    get:
+      tags: [progress]
+      summary: Сырое тело сценария для владельца (использует simulation-service с Bearer пользователя)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: scenario_id
+          required: true
+          schema: { type: string, example: "cs-mail-550e8400-e29b-41d4-a716-446655440000" }
+      responses:
+        "200":
+          description: JSON сценария почты или чата
+        "404":
+          description: Нет доступа или не найдено
+
+  /api/v1/progress/custom-scenarios/{scenario_id}:
+    delete:
+      tags: [progress]
+      summary: Удалить кейс из каталога
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: scenario_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+        "404":
+          description: Не найдено
 
   /api/v1/progress/leaderboard:
     get:

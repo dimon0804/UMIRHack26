@@ -4,9 +4,11 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from app.api.routes.cipherline import router as cipherline_router
+from app.api.routes.custom_simulation import router as custom_simulation_router
 from app.api.routes.leaderboard import router as leaderboard_router
 from app.core.config import settings
 from app.db.session import engine
+from app.models.custom_simulation import CustomSimulationCase  # noqa: F401
 from app.models.game_state import Base
 
 
@@ -27,6 +29,7 @@ app = FastAPI(
 )
 
 app.include_router(cipherline_router)
+app.include_router(custom_simulation_router)
 app.include_router(leaderboard_router)
 
 

@@ -1,8 +1,13 @@
 import { apiBaseUrl } from "@/api/client";
+import { refreshGatewayAccessToken } from "@/lib/gatewaySession";
 import { leagueByXp } from "@/lib/leagues";
 import type { AppLocale } from "@/i18n/I18nContext";
 
-const base = () => `${apiBaseUrl()}/api/v1/progress/leaderboard`;
+/** Без ведущего слэша у apiBase; относительный путь к /api/... если база пустая (nginx → gateway). */
+function leaderboardBasePath(): string {
+  const root = apiBaseUrl().replace(/\/$/, "");
+  return root ? `${root}/api/v1/progress/leaderboard` : "/api/v1/progress/leaderboard";
+}
 
 export type SortKey = "xp" | "accuracy" | "modules";
 
@@ -50,27 +55,37 @@ export async function fetchLeaderboard(
   sort: SortKey = "xp",
   limit = 50,
 ): Promise<LeaderboardDto> {
-  const u = new URL(base());
-  u.searchParams.set("sort", sort);
-  u.searchParams.set("limit", String(limit));
-  const res = await fetch(u.toString());
+  const q = new URLSearchParams({ sort, limit: String(limit) });
+  const res = await fetch(`${leaderboardBasePath()}?${q.toString()}`);
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) as LeaderboardDto;
 }
 
 export async function fetchLeaderboardStats(): Promise<LeaderboardStatsDto> {
-  const res = await fetch(`${base()}/stats`);
+  const res = await fetch(`${leaderboardBasePath()}/stats`);
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) as LeaderboardStatsDto;
 }
 
-export async function fetchMyRank(accessToken: string): Promise<MyRankDto> {
-  const res = await fetch(`${base()}/me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (res.status === 401) throw new Error("unauthorized");
-  if (!res.ok) throw new Error(await res.text());
-  return (await res.json()) as MyRankDto;
+export type FetchMyRankResult =
+  | { ok: true; data: MyRankDto }
+  | { ok: false; reason: "unauthorized" };
+
+export async function fetchMyRank(accessToken: string): Promise<FetchMyRankResult> {
+  const once = async (token: string): Promise<FetchMyRankResult> => {
+    const res = await fetch(`${leaderboardBasePath()}/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401) return { ok: false, reason: "unauthorized" };
+    if (!res.ok) throw new Error(await res.text());
+    return { ok: true, data: (await res.json()) as MyRankDto };
+  };
+  const first = await once(accessToken);
+  if (first.ok) return first;
+  if (first.reason !== "unauthorized") return first;
+  const next = await refreshGatewayAccessToken();
+  if (!next) return first;
+  return once(next);
 }
 
 export function leagueLabelForKey(key: string, locale: AppLocale): string {

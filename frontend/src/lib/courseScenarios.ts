@@ -14,3 +14,14 @@ export type SimulationScenarioId = (typeof SIMULATION_SCENARIO_ORDER)[number];
 export function isSimulationScenarioId(id: string): id is SimulationScenarioId {
   return (SIMULATION_SCENARIO_ORDER as readonly string[]).includes(id);
 }
+
+const CUSTOM_SCENARIO_ID_RE = /^cs-(mail|chat)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Сохранённые AI-кейсы (progress-service + simulation-service). */
+export function isCustomSimulationId(id: string): boolean {
+  return CUSTOM_SCENARIO_ID_RE.test(id);
+}
+
+export function isPlayableSimulationId(id: string): boolean {
+  return isSimulationScenarioId(id) || isCustomSimulationId(id);
+}

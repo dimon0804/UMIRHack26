@@ -1,6 +1,6 @@
 import { Link, useLocation, useParams, Navigate } from "react-router-dom";
 import type { ScenarioRunSummary } from "@/context/AppContext";
-import { isSimulationScenarioId } from "@/lib/courseScenarios";
+import { isPlayableSimulationId } from "@/lib/courseScenarios";
 
 type ResultsState = {
   correct: number;
@@ -124,7 +124,7 @@ export function ResultsPage() {
           Другой сценарий
         </Link>
         <Link
-          to={isSimulationScenarioId(id) ? `/sim/run/${id}` : "/dashboard"}
+          to={isPlayableSimulationId(id) ? `/sim/run/${id}` : "/dashboard"}
           className="btn-ghost flex-1 text-center !no-underline"
         >
           Повторить

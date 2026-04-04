@@ -16,6 +16,7 @@ from app.scenario_narrative import (
     scenario_action_cards,
     scenario_skimming,
 )
+from app.services.progress_payload import fetch_custom_scenario_payload, is_custom_scenario_id
 from app.services.scenario_llm_client import fetch_llm_scenario
 
 router = APIRouter(prefix="/scenarios", tags=["simulator"])
@@ -151,10 +152,47 @@ def _wifi_attack(step: int) -> str:
     return ("evil_twin", "rogue_ap", "evil_twin", "mitm", "wifi_security")[step - 1]
 
 
-async def _scenario_for_get(scenario_id: str, locale: Locale, step: int = 1) -> dict | None:
+async def _scenario_for_get(
+    scenario_id: str,
+    locale: Locale,
+    step: int = 1,
+    authorization: str | None = None,
+) -> dict | None:
     """GET сценария для шага step (1..5); почта/чат — Mistral только на шаге 1."""
     sid = _canonical_id(scenario_id)
     step = _clamp_step(step)
+
+    if is_custom_scenario_id(sid):
+        if step != 1:
+            return None
+        payload = await fetch_custom_scenario_payload(sid, authorization)
+        if not payload:
+            return None
+        scen_type = payload.get("type")
+        if scen_type == "email":
+            narrative = (
+                f"AI-generated: {payload.get('title', '')}"
+                if locale == "en"
+                else f"Сгенерированный кейс: {payload.get('title', '')}"
+            )
+            attack = "phishing"
+        elif scen_type == "chat":
+            narrative = (
+                f"AI-generated chat: {payload.get('title', '')}"
+                if locale == "en"
+                else f"Сгенерированный чат: {payload.get('title', '')}"
+            )
+            attack = "social_engineering"
+        else:
+            return None
+        return {
+            **payload,
+            "id": sid,
+            "step": 1,
+            "total_steps": 1,
+            "narrative_arc": narrative,
+            "attack_family": attack,
+        }
 
     if sid == AGGREGATE_MAIL_ID:
         if step == 1:
@@ -1228,7 +1266,8 @@ async def get_scenario(
     step: int = Query(1, ge=1, le=NARRATIVE_TOTAL_STEPS, description="Уровень 1..5"),
 ) -> dict:
     locale = _locale_from_request(request, lang)
-    scenario = await _scenario_for_get(scenario_id, locale, step)
+    auth = request.headers.get("authorization")
+    scenario = await _scenario_for_get(scenario_id, locale, step, auth)
     if not scenario:
         raise HTTPException(status_code=404, detail="scenario_not_found")
     return {"locale": locale, "scenario": scenario}
@@ -1244,6 +1283,25 @@ async def submit_choice(
     locale = _locale_from_request(request, lang)
     sid = _canonical_id(scenario_id)
     st = _clamp_step(body.step)
+    auth = request.headers.get("authorization")
+
+    if is_custom_scenario_id(sid):
+        payload = await fetch_custom_scenario_payload(sid, auth)
+        if not payload:
+            raise HTTPException(status_code=404, detail="scenario_not_found")
+        if st != 1:
+            raise HTTPException(status_code=400, detail="custom_scenario_single_step")
+        scen_type = payload.get("type")
+        if scen_type == "email":
+            outcomes = _outcomes_mail(locale)
+        elif scen_type == "chat":
+            outcomes = _outcomes_chat(locale)
+        else:
+            raise HTTPException(status_code=400, detail="invalid_custom_payload")
+        outcome = outcomes.get(body.choice_id)
+        if not outcome:
+            return {"ok": False, "error": "unknown_choice", "locale": locale}
+        return {"ok": True, "locale": locale, "result": outcome.model_dump()}
 
     if sid == AGGREGATE_SKIMMING_ID:
         raw = outcome_skimming(locale, st, body.choice_id)

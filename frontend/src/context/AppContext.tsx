@@ -15,6 +15,7 @@ import { leagueByXp } from "@/lib/leagues";
 import { certificateEligible, certificateReconcilePatch } from "@/lib/certificate";
 import {
   SIMULATION_SCENARIO_ORDER as SCENARIO_ORDER,
+  isCustomSimulationId,
   isSimulationScenarioId,
 } from "@/lib/courseScenarios";
 import {
@@ -25,9 +26,15 @@ import {
   fetchCipherlineState,
   putCipherlineState,
 } from "@/lib/cipherlineRemote";
+import {
+  clearGatewaySession,
+  GATEWAY_SESSION_KEY,
+  parseStoredSession,
+  setGatewayAccessTokenListener,
+  writeGatewaySession,
+} from "@/lib/gatewaySession";
 
 const STORAGE_USERS = "cg_users_v1";
-const STORAGE_SESSION = "cg_session_v1";
 
 const defaultUserState = (login: string): UserState => ({
   login,
@@ -119,25 +126,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [user?.token]);
 
   useEffect(() => {
+    setGatewayAccessTokenListener((access) => {
+      accessTokenRef.current = access;
+      setUser((u) => (u ? { ...u, token: access } : u));
+    });
+    return () => setGatewayAccessTokenListener(null);
+  }, []);
+
+  useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
   const persistGatewayGameState = useCallback((state: UserState) => {
     saveCipherlineGameState(state.login, state);
-    const t = accessTokenRef.current;
-    if (t) void putCipherlineState(t, state);
+    const token = accessTokenRef.current;
+    if (!token) return;
+    void (async () => {
+      let ok = await putCipherlineState(token, state);
+      if (!ok) {
+        await new Promise((r) => setTimeout(r, 1200));
+        ok = await putCipherlineState(accessTokenRef.current ?? token, state);
+      }
+      if (!ok) {
+        console.error(
+          "[Cipherline] Прогресс не сохранился на сервере (см. Network → PUT …/cipherline/state). Рейтинг и таблица лидеров читают только БД.",
+        );
+      }
+    })();
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const s = sessionStorage.getItem(STORAGE_SESSION);
-        if (s) {
-          const parsed = JSON.parse(s) as { login: string; accessToken?: string };
+        const parsed = parseStoredSession();
+        if (parsed) {
           if (realApi) {
-            if (parsed.accessToken) {
-              const { login, accessToken } = parsed;
+            const { login, accessToken } = parsed;
+            if (accessToken) {
               setUser({ login, token: accessToken });
               const remote = await fetchCipherlineState(accessToken);
               if (cancelled) return;
@@ -180,14 +206,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clearAuthError = useCallback(() => setAuthError(null), []);
 
   const persistDemoSession = (login: string) => {
-    sessionStorage.setItem(STORAGE_SESSION, JSON.stringify({ login }));
+    sessionStorage.setItem(GATEWAY_SESSION_KEY, JSON.stringify({ login }));
   };
 
-  const persistGatewaySession = (login: string, accessToken: string) => {
-    sessionStorage.setItem(
-      STORAGE_SESSION,
-      JSON.stringify({ login, accessToken }),
-    );
+  const persistGatewaySession = (login: string, accessToken: string, refreshToken: string) => {
+    writeGatewaySession({ login, accessToken, refreshToken });
   };
 
   const loginFn = useCallback(
@@ -208,7 +231,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           saveCipherlineGameState(email, state);
           if (!remote || patch) await putCipherlineState(tokens.access_token, state);
           setUserState(state);
-          persistGatewaySession(email, tokens.access_token);
+          persistGatewaySession(email, tokens.access_token, tokens.refresh_token);
         } else {
           await new Promise((r) => setTimeout(r, 400));
           const users = loadUsers();
@@ -258,7 +281,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           saveCipherlineGameState(email, state);
           await putCipherlineState(tokens.access_token, state);
           setUserState(state);
-          persistGatewaySession(email, tokens.access_token);
+          persistGatewaySession(email, tokens.access_token, tokens.refresh_token);
         } else {
           await new Promise((r) => setTimeout(r, 450));
           const users = loadUsers();
@@ -287,7 +310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     setUserState(null);
-    sessionStorage.removeItem(STORAGE_SESSION);
+    clearGatewaySession();
   }, []);
 
   const updateUserState = useCallback(
@@ -325,6 +348,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const scenarioStatus = useCallback(
     (scenarioId: string): "locked" | "available" | "completed" => {
       if (!userState) return "locked";
+      if (isCustomSimulationId(scenarioId)) {
+        if (userState.scenariosCompleted.includes(scenarioId)) return "completed";
+        return "available";
+      }
       if (!isSimulationScenarioId(scenarioId)) return "locked";
       if (userState.scenariosCompleted.includes(scenarioId)) return "completed";
       const idx = SCENARIO_ORDER.indexOf(scenarioId);

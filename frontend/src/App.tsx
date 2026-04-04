@@ -20,7 +20,9 @@ function Shell({ children }: { children: ReactNode }) {
     <div className="relative min-h-screen">
       <AmbientBackdrop />
       {user && <AppHeader />}
-      <div className={`relative ${user ? "pt-[8.75rem] print:pt-4 sm:pt-32 md:pt-36" : ""}`}>{children}</div>
+      <main className="relative min-h-[min(100dvh,100vh)] min-w-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] print:pb-0 print:pt-0">
+        {children}
+      </main>
     </div>
   );
 }

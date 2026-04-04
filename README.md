@@ -1,6 +1,6 @@
 # UMIRHack26 — симулятор кибератак (образовательная платформа)
 
-Production-oriented monorepo: **FastAPI**-микросервисы, **Next.js** UI, **PostgreSQL**, **Redis**, **Docker Compose**. Единая точка входа — **API Gateway** (`/api/v1/...`).
+Production-oriented monorepo: **FastAPI**-микросервисы, **Vite + React** UI, **PostgreSQL**, **Redis**, **Docker Compose**. Единая точка входа — **API Gateway** (`/api/v1/...`).
 
 ## Быстрый старт
 
@@ -46,6 +46,11 @@ docs/                # Архитектура, ER, OpenAPI, Postman, OWASP/CWE/A
 | GET | `/api/v1/progress/leaderboard` | Публичный лидерборд (`?sort=xp\|accuracy\|modules`) |
 | GET | `/api/v1/progress/leaderboard/stats` | Агрегированная статистика |
 | GET | `/api/v1/progress/leaderboard/me` | Ваш ранг (Bearer) |
+| GET/POST | `/api/v1/progress/custom-scenarios` | Каталог пользовательских AI-кейсов (Bearer) |
+| DELETE | `/api/v1/progress/custom-scenarios/{cs-mail-…\|cs-chat-…}` | Удалить кейс (Bearer) |
+| POST | `/api/v1/ai/generate-scenario` | Сгенерировать JSON сценария почты или чата (для сохранения в custom-scenarios) |
+
+Поток «новый кейс»: `POST /api/v1/ai/generate-scenario` → `POST /api/v1/progress/custom-scenarios` с `{ "scenario": … }` → в UI появляется строка с id `cs-mail-…` / `cs-chat-…`; `GET/POST …/simulation/scenarios/…` для игры передаёт **тот же Bearer**. В Docker у **simulation-service** должен быть `PROGRESS_SERVICE_URL` (уже в `docker-compose.yml`).
 
 Ошибки содержат поля `code`, `message` (по `Accept-Language`: `ru` по умолчанию), `messages.ru` / `messages.en`.
 

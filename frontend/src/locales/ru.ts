@@ -9,6 +9,8 @@ export const ru: Record<string, string> = {
   "header.themeLight": "Свет",
   "header.themeDark": "Ночь",
   "header.logout": "Выход",
+  "header.menuOpen": "Открыть меню",
+  "header.menuClose": "Закрыть меню",
   "header.hp": "HP",
   "dashboard.kicker": "Дашборд",
   "dashboard.title": "Линия обороны",
@@ -16,6 +18,14 @@ export const ru: Record<string, string> = {
     "Пять сюжетных модулей (Дом, Офис, Wi‑Fi, скимминг, выбор действия). В каждом — 5 связанных уровней и варианты ответа. Проходите по очереди.",
   "dashboard.rep": "Репутация",
   "dashboard.scenariosTitle": "Учебные модули",
+  "dashboard.customKicker": "Новые сценарии",
+  "dashboard.customSub":
+    "Создать новое письмо или переписку, сохранить в каталог и пройти как отдельный короткий модуль.",
+  "dashboard.customGenEmail": "Сгенерировать письмо",
+  "dashboard.customGenChat": "Сгенерировать чат",
+  "dashboard.customGenerating": "Генерация…",
+  "dashboard.customBadge": "AI",
+  "dashboard.customDelete": "Удалить из каталога",
   "dashboard.locked": "Заблокирован",
   "dashboard.available": "Доступен",
   "dashboard.completed": "Пройден",
@@ -40,8 +50,7 @@ export const ru: Record<string, string> = {
   "scenario.module.skimming": "Скимминг и платёжные терминалы",
   "scenario.module.action-choice": "Выбор действия — инциденты",
   "sim.kicker": "Живая симуляция",
-  "sim.llmHint":
-    "Текст генерирует учебный бэкенд (Mistral при настройке), поэтому каждый запуск может отличаться.",
+  "sim.llmHint": "Содержимое может меняться от запуска к запуску.",
   "sim.loadError": "Не удалось загрузить сценарий. Проверьте gateway и simulation-service.",
   "sim.retry": "Повторить",
   "sim.refresh": "Новый вариант ИИ",
@@ -132,6 +141,11 @@ export const ru: Record<string, string> = {
   "leaderboard.title": "Рейтинг и статистика",
   "leaderboard.sub":
     "Таблица строится по сохранённому прогрессу на сервере. В таблице — маскированные адреса.",
+  "leaderboard.dbHint":
+    "Дашборд может совпадать с браузером; рейтинг берёт только PostgreSQL после успешного PUT /api/v1/progress/cipherline/state (смотрите Network в DevTools).",
+  "leaderboard.refresh": "Обновить",
+  "leaderboard.notInTable":
+    "Ваш профиль в базе есть, но при этой сортировке вы не вошли в первые {limit} строк. Блок «Ваша позиция» выше — ранг по XP (как на сервере).",
   "leaderboard.needGateway":
     "Глобальный рейтинг доступен при работе через API gateway (реальная регистрация). В демо-режиме данные только в браузере.",
   "leaderboard.toDash": "На пульт",
@@ -154,4 +168,6 @@ export const ru: Record<string, string> = {
   "leaderboard.col.league": "Лига",
   "leaderboard.youBadge": "вы",
   "leaderboard.empty": "Пока нет сохранённых профилей — станьте первым.",
+  "leaderboard.tokenExpired":
+    "Не удалось загрузить ваше место в рейтинге (сессия отклонена). Войдите снова — особенно если вход был до сохранения refresh-токена в браузере.",
 };

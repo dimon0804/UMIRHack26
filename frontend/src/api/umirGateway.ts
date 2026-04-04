@@ -57,3 +57,7 @@ export async function umirRegister(
 ): Promise<TokenPair> {
   return postJson<TokenPair>("/api/v1/auth/register", { email, password, locale });
 }
+
+export async function umirRefresh(refreshToken: string): Promise<TokenPair> {
+  return postJson<TokenPair>("/api/v1/auth/refresh", { refresh_token: refreshToken });
+}

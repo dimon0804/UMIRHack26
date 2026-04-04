@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
 import { useI18n } from "@/i18n/I18nContext";
@@ -14,6 +14,9 @@ import {
   type SortKey,
 } from "@/lib/leaderboardClient";
 
+/** Максимум строк API; больше — не попадёте в таблицу при текущей сортировке. */
+const LEADERBOARD_FETCH_LIMIT = 200;
+
 export function LeaderboardPage() {
   const { user, userState } = useApp();
   const { locale, t } = useI18n();
@@ -22,46 +25,59 @@ export function LeaderboardPage() {
   const [board, setBoard] = useState<LeaderboardDto | null>(null);
   const [stats, setStats] = useState<LeaderboardStatsDto | null>(null);
   const [mine, setMine] = useState<MyRankDto | null>(null);
+  const [rankUnauthorized, setRankUnauthorized] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const refresh = useCallback(async () => {
     if (!realApi) {
       setLoading(false);
       return;
     }
-    let cancelled = false;
     setLoading(true);
     setErr(null);
-    void (async () => {
-      try {
-        const [b, s] = await Promise.all([
-          fetchLeaderboard(sort, 80),
-          fetchLeaderboardStats(),
-        ]);
-        if (cancelled) return;
-        setBoard(b);
-        setStats(s);
-        if (user?.token) {
-          try {
-            const m = await fetchMyRank(user.token);
-            if (!cancelled) setMine(m);
-          } catch {
-            if (!cancelled) setMine(null);
+    setRankUnauthorized(false);
+    try {
+      const [b, s] = await Promise.all([
+        fetchLeaderboard(sort, LEADERBOARD_FETCH_LIMIT),
+        fetchLeaderboardStats(),
+      ]);
+      setBoard(b);
+      setStats(s);
+      if (user?.token) {
+        try {
+          const rank = await fetchMyRank(user.token);
+          if (rank.ok) {
+            setMine(rank.data);
+          } else {
+            setMine(null);
+            setRankUnauthorized(true);
           }
-        } else {
+        } catch {
           setMine(null);
         }
-      } catch (e) {
-        if (!cancelled) setErr(e instanceof Error ? e.message : "error");
-      } finally {
-        if (!cancelled) setLoading(false);
+      } else {
+        setMine(null);
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "error");
+    } finally {
+      setLoading(false);
+    }
   }, [realApi, sort, user?.token]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!realApi) return;
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [realApi, refresh]);
 
   if (!userState) return null;
 
@@ -91,8 +107,11 @@ export function LeaderboardPage() {
           <p className="mt-2 max-w-xl text-sm text-stone-500 dark:text-stone-400">
             {t("leaderboard.sub")}
           </p>
+          <p className="mt-2 max-w-xl text-xs text-stone-500/90 dark:text-stone-500">
+            {t("leaderboard.dbHint")}
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {(["xp", "accuracy", "modules"] as const).map((k) => (
             <button
               key={k}
@@ -107,12 +126,26 @@ export function LeaderboardPage() {
               {t(`leaderboard.sort.${k}`)}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={loading}
+            className="rounded-full border border-stone-200 bg-white/80 px-3 py-2 text-xs font-medium text-stone-600 hover:border-emerald-300 disabled:opacity-50 dark:border-stone-600 dark:bg-stone-900/50 dark:text-stone-300"
+          >
+            {t("leaderboard.refresh")}
+          </button>
         </div>
       </div>
 
       {err ? (
         <p className="mt-6 rounded-xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100">
           {err}
+        </p>
+      ) : null}
+
+      {rankUnauthorized ? (
+        <p className="mt-6 rounded-xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/45 dark:bg-amber-950/35 dark:text-amber-100">
+          {t("leaderboard.tokenExpired")}
         </p>
       ) : null}
 
@@ -160,6 +193,15 @@ export function LeaderboardPage() {
           ) : mine && mine.rank == null && user?.token ? (
             <p className="mt-8 rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
               {t("leaderboard.noSaveYet")}
+            </p>
+          ) : null}
+
+          {mine?.entry &&
+          board &&
+          board.entries.length > 0 &&
+          !board.entries.some((e) => e.user_id === mine.entry!.user_id) ? (
+            <p className="mt-4 rounded-xl border border-stone-200/90 bg-stone-100/80 px-4 py-3 text-sm text-stone-700 dark:border-stone-600 dark:bg-stone-900/50 dark:text-stone-300">
+              {t("leaderboard.notInTable", { limit: String(board.limit) })}
             </p>
           ) : null}
 

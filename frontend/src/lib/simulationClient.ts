@@ -109,16 +109,23 @@ export async function fetchSimulationScenarioList(
   return r.json() as Promise<{ scenarios: ApiScenarioListItem[] }>;
 }
 
+function authHeaders(lang: "ru" | "en", accessToken?: string | null): Record<string, string> {
+  const h: Record<string, string> = { "Accept-Language": lang };
+  if (accessToken) h.Authorization = `Bearer ${accessToken}`;
+  return h;
+}
+
 export async function fetchSimulationScenario(
   id: string,
   lang: "ru" | "en",
   step: number,
+  accessToken?: string | null,
 ): Promise<{ scenario: ApiScenarioUnion }> {
   const r = await fetch(
     apiPath(
       `/api/v1/simulation/scenarios/${encodeURIComponent(id)}?lang=${lang}&step=${step}`,
     ),
-    { cache: "no-store", headers: { "Accept-Language": lang } },
+    { cache: "no-store", headers: authHeaders(lang, accessToken) },
   );
   if (!r.ok) throw new Error(`scenario ${r.status}`);
   const data = (await r.json()) as { scenario?: ApiScenarioUnion };
@@ -131,6 +138,7 @@ export async function submitSimulationChoice(
   choiceId: string,
   lang: "ru" | "en",
   step: number,
+  accessToken?: string | null,
 ): Promise<SubmitResult> {
   const r = await fetch(
     apiPath(
@@ -139,8 +147,8 @@ export async function submitSimulationChoice(
     {
       method: "POST",
       headers: {
+        ...authHeaders(lang, accessToken),
         "Content-Type": "application/json",
-        "Accept-Language": lang,
       },
       body: JSON.stringify({ choice_id: choiceId, step }),
     },

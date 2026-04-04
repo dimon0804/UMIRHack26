@@ -5,6 +5,8 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    /* запас под липкую шапку при якорных переходах */
+    scroll-padding-top: 0.75rem;
   }
   body {
     @apply min-h-screen scrollbar-subtle antialiased font-sans bg-paper text-ink transition-colors duration-300 ease-soft dark:bg-night dark:text-stone-100;

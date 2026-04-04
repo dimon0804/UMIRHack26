@@ -12,7 +12,7 @@ import {
   type ApiTerminalScenario,
   type ApiWifiScenario,
 } from "@/lib/simulationClient";
-import { isSimulationScenarioId, MODULE_TOTAL_STEPS } from "@/lib/courseScenarios";
+import { isCustomSimulationId, isPlayableSimulationId, MODULE_TOTAL_STEPS } from "@/lib/courseScenarios";
 import type { ScenarioRunSummary } from "@/context/AppContext";
 
 function attackTypeForScenario(data: ApiScenarioUnion): string {
@@ -27,7 +27,7 @@ export function SimulationRunPage() {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
   const { locale, t } = useI18n();
-  const { userState, scenarioStatus, applyScenarioResult, restartScenario } = useApp();
+  const { userState, user, scenarioStatus, applyScenarioResult, restartScenario } = useApp();
 
   const [data, setData] = useState<ApiScenarioUnion | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -39,7 +39,7 @@ export function SimulationRunPage() {
   const [runHpDelta, setRunHpDelta] = useState(0);
   const [uiStep, setUiStep] = useState(1);
 
-  const status = id && isSimulationScenarioId(id) ? scenarioStatus(id) : "locked";
+  const status = id && isPlayableSimulationId(id) ? scenarioStatus(id) : "locked";
   const lang = locale;
 
   const progStep = id ? userState?.progress[id]?.currentStep : undefined;
@@ -48,22 +48,23 @@ export function SimulationRunPage() {
   useEffect(() => {
     if (!id || !userState || result) return;
     const p = userState.progress[id];
+    const stepCap = isCustomSimulationId(id) ? 1 : MODULE_TOTAL_STEPS;
     if (p?.completed) {
-      setUiStep(MODULE_TOTAL_STEPS);
+      setUiStep(stepCap);
       return;
     }
-    const next = Math.min(Math.max(1, p?.currentStep ?? 1), MODULE_TOTAL_STEPS);
+    const next = Math.min(Math.max(1, p?.currentStep ?? 1), stepCap);
     setUiStep(next);
   }, [id, userState, progStep, progDone, result]);
 
   const load = useCallback(async () => {
-    if (!id || !isSimulationScenarioId(id)) return;
+    if (!id || !isPlayableSimulationId(id)) return;
     setLoading(true);
     setLoadError(null);
     setResult(null);
     setRunHpDelta(0);
     try {
-      const r = await fetchSimulationScenario(id, lang, uiStep);
+      const r = await fetchSimulationScenario(id, lang, uiStep, user?.token);
       setData(r.scenario);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "error");
@@ -71,14 +72,14 @@ export function SimulationRunPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, lang, uiStep]);
+  }, [id, lang, uiStep, user?.token]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    if (!id || !isSimulationScenarioId(id) || status === "locked") {
+    if (!id || !isPlayableSimulationId(id) || status === "locked") {
       nav("/dashboard", { replace: true });
     }
   }, [id, status, nav]);
@@ -96,7 +97,7 @@ export function SimulationRunPage() {
     setSubmitting(true);
     try {
       const curStep = data.step ?? uiStep;
-      const res = await submitSimulationChoice(id, choiceId, lang, curStep);
+      const res = await submitSimulationChoice(id, choiceId, lang, curStep, user?.token);
       if (!res.ok || !res.result) {
         setLoadError(res.error ?? "submit failed");
         return;
@@ -154,7 +155,7 @@ export function SimulationRunPage() {
     }
   }
 
-  if (!id || !isSimulationScenarioId(id) || !userState) {
+  if (!id || !isPlayableSimulationId(id) || !userState) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-stone-500">{t("common.loading")}</div>
     );

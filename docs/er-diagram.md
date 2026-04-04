@@ -40,7 +40,17 @@ erDiagram
     jsonb state
     timestamptz updated_at
   }
+
+  custom_simulation_case {
+    uuid id PK
+    uuid user_id
+    varchar kind
+    varchar title
+    jsonb payload
+    timestamptz created_at
+  }
 ```
 
 - **`user_id`** совпадает с `users.id` из `auth_db` (логическая связь между сервисами; физический FK не обязателен при раздельных БД).
 - **`state`** — полный объект прогресса клиента (сценарии, ответы, сертификат и т.д.).
+- **`custom_simulation_case`** — сгенерированные через AI и сохранённые пользователем одношаговые кейсы (почта/чат); идентификатор в API `cs-mail-{uuid}` / `cs-chat-{uuid}`.

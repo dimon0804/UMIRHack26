@@ -125,6 +125,37 @@
             "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
             "url": "{{baseUrl}}/api/v1/progress/leaderboard/me"
           }
+        },
+        {
+          "name": "List custom AI scenarios",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/v1/progress/custom-scenarios"
+          }
+        },
+        {
+          "name": "Save custom scenario",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"scenario\": {\"type\":\"email\",\"title\":\"…\",\"sender_display\":\"…\",\"sender_email\":\"a@b.c\",\"subject\":\"…\",\"preview\":\"…\",\"body_paragraphs\":[\"p1\",\"p2\"],\"cta_label\":\"…\",\"cta_href_display\":\"…\",\"choices\":[{\"id\":\"open_link\",\"label\":\"…\"},{\"id\":\"delete_only\",\"label\":\"…\"},{\"id\":\"verify_sender\",\"label\":\"…\"},{\"id\":\"report\",\"label\":\"…\"}]}}"
+            },
+            "url": "{{baseUrl}}/api/v1/progress/custom-scenarios"
+          }
+        },
+        {
+          "name": "Delete custom scenario",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/v1/progress/custom-scenarios/cs-mail-00000000-0000-0000-0000-000000000000"
+          }
         }
       ]
     },
@@ -134,6 +165,18 @@
         {
           "name": "LLM config",
           "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/ai/llm-config" }
+        },
+        {
+          "name": "Generate scenario (email or chat JSON)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"scenario_type\":\"email\",\"locale\":\"ru\",\"diversity_roll\":42}"
+            },
+            "url": "{{baseUrl}}/api/v1/ai/generate-scenario"
+          }
         }
       ]
     }

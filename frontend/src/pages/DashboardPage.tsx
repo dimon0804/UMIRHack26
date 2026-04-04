@@ -1,10 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "@/context/AppContext";
 import { useI18n } from "@/i18n/I18nContext";
+import { useRealApi } from "@/api/client";
 import { progressToNextLeague, leagueByXp } from "@/lib/leagues";
 import { certificateEligible } from "@/lib/certificate";
-import { MODULE_TOTAL_STEPS } from "@/lib/courseScenarios";
+import { isCustomSimulationId, MODULE_TOTAL_STEPS } from "@/lib/courseScenarios";
+import {
+  deleteCustomScenario,
+  generateAiScenario,
+  listCustomScenarios,
+  saveCustomScenario,
+  type CustomScenarioListItem,
+} from "@/lib/customScenarioClient";
 import { fetchSimulationScenarioList, type ApiScenarioListItem } from "@/lib/simulationClient";
 
 function ScenarioIcon({ type }: { type: ApiScenarioListItem["type"] }) {
@@ -48,11 +56,24 @@ function ScenarioIcon({ type }: { type: ApiScenarioListItem["type"] }) {
 }
 
 export function DashboardPage() {
-  const { userState, scenarioStatus, restartScenario } = useApp();
+  const { userState, user, scenarioStatus, restartScenario } = useApp();
   const nav = useNavigate();
   const { locale, t } = useI18n();
+  const realApi = useRealApi();
   const [items, setItems] = useState<ApiScenarioListItem[]>([]);
+  const [customItems, setCustomItems] = useState<CustomScenarioListItem[]>([]);
   const [listErr, setListErr] = useState<string | null>(null);
+  const [customErr, setCustomErr] = useState<string | null>(null);
+  const [genLoading, setGenLoading] = useState<"email" | "chat" | null>(null);
+
+  const displayItems = useMemo((): ApiScenarioListItem[] => {
+    const tail: ApiScenarioListItem[] = customItems.map((c) => ({
+      id: c.id,
+      type: c.type,
+      title: c.title,
+    }));
+    return [...items, ...tail];
+  }, [items, customItems]);
 
   useEffect(() => {
     void fetchSimulationScenarioList(locale)
@@ -62,6 +83,46 @@ export function DashboardPage() {
       })
       .catch((e) => setListErr(e instanceof Error ? e.message : "list error"));
   }, [locale]);
+
+  useEffect(() => {
+    if (!realApi || !user?.token) {
+      setCustomItems([]);
+      return;
+    }
+    void listCustomScenarios(user.token)
+      .then((list) => {
+        setCustomItems(list);
+        setCustomErr(null);
+      })
+      .catch(() => setCustomItems([]));
+  }, [realApi, user?.token]);
+
+  async function generateAndSave(kind: "email" | "chat") {
+    if (!user?.token) return;
+    setCustomErr(null);
+    setGenLoading(kind);
+    try {
+      const scenario = await generateAiScenario(kind, locale);
+      await saveCustomScenario(user.token, scenario);
+      setCustomItems(await listCustomScenarios(user.token));
+    } catch (e) {
+      setCustomErr(e instanceof Error ? e.message : "error");
+    } finally {
+      setGenLoading(null);
+    }
+  }
+
+  async function removeCustom(id: string) {
+    if (!user?.token) return;
+    setCustomErr(null);
+    try {
+      await deleteCustomScenario(user.token, id);
+      restartScenario(id);
+      setCustomItems(await listCustomScenarios(user.token));
+    } catch (e) {
+      setCustomErr(e instanceof Error ? e.message : "error");
+    }
+  }
 
   if (!userState) return null;
 
@@ -104,14 +165,44 @@ export function DashboardPage() {
           <h2 className="font-display text-lg font-semibold text-ink dark:text-stone-100">
             {t("dashboard.scenariosTitle")}
           </h2>
+          {realApi && user?.token ? (
+            <div className="mt-6 rounded-2xl border border-violet-200/80 bg-violet-50/50 p-4 dark:border-violet-900/40 dark:bg-violet-950/20">
+              <p className="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-200">
+                {t("dashboard.customKicker")}
+              </p>
+              <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">{t("dashboard.customSub")}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={genLoading !== null}
+                  onClick={() => void generateAndSave("email")}
+                  className="btn-primary !text-xs disabled:opacity-50"
+                >
+                  {genLoading === "email" ? t("dashboard.customGenerating") : t("dashboard.customGenEmail")}
+                </button>
+                <button
+                  type="button"
+                  disabled={genLoading !== null}
+                  onClick={() => void generateAndSave("chat")}
+                  className="btn-ghost !text-xs disabled:opacity-50"
+                >
+                  {genLoading === "chat" ? t("dashboard.customGenerating") : t("dashboard.customGenChat")}
+                </button>
+              </div>
+              {customErr ? (
+                <p className="mt-2 text-xs text-red-700 dark:text-red-400">{customErr}</p>
+              ) : null}
+            </div>
+          ) : null}
           <ul className="mt-8 space-y-4">
-            {items.map((s, i) => {
+            {displayItems.map((s, i) => {
               const st = scenarioStatus(s.id);
               const prog = userState.progress[s.id];
+              const stepsTotal = isCustomSimulationId(s.id) ? 1 : MODULE_TOTAL_STEPS;
               const doneLevels =
                 st === "completed"
-                  ? MODULE_TOTAL_STEPS
-                  : Math.max(0, Math.min((prog?.currentStep ?? 1) - 1, MODULE_TOTAL_STEPS));
+                  ? stepsTotal
+                  : Math.max(0, Math.min((prog?.currentStep ?? 1) - 1, stepsTotal));
               const label =
                 st === "locked"
                   ? t("dashboard.locked")
@@ -131,14 +222,21 @@ export function DashboardPage() {
                       <ScenarioIcon type={s.type} />
                     </div>
                     <div>
-                      <h3 className="font-display text-base font-medium text-ink dark:text-stone-100">{s.title}</h3>
+                      <h3 className="flex flex-wrap items-center gap-2 font-display text-base font-medium text-ink dark:text-stone-100">
+                        <span>{s.title}</span>
+                        {isCustomSimulationId(s.id) ? (
+                          <span className="rounded-full bg-violet-500/15 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-violet-800 dark:text-violet-200">
+                            {t("dashboard.customBadge")}
+                          </span>
+                        ) : null}
+                      </h3>
                       <p className="mt-2 font-mono text-xs text-stone-500 dark:text-zinc-400">
                         {st === "completed" ? (
-                          t("dashboard.moduleCompletedLine", { n: String(MODULE_TOTAL_STEPS) })
+                          t("dashboard.moduleCompletedLine", { n: String(stepsTotal) })
                         ) : (
                           <>
                             {t("dashboard.levelsProgress", {
-                              total: String(MODULE_TOTAL_STEPS),
+                              total: String(stepsTotal),
                               done: String(doneLevels),
                             })}{" "}
                             · <span className="font-medium">{label}</span>
@@ -148,6 +246,15 @@ export function DashboardPage() {
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col gap-2 md:items-end">
+                    {isCustomSimulationId(s.id) && user?.token ? (
+                      <button
+                        type="button"
+                        onClick={() => void removeCustom(s.id)}
+                        className="text-xs text-stone-500 underline decoration-stone-300 underline-offset-2 hover:text-red-700 dark:text-stone-400 dark:hover:text-red-400"
+                      >
+                        {t("dashboard.customDelete")}
+                      </button>
+                    ) : null}
                     {st !== "locked" ? (
                       st === "completed" ? (
                         <button

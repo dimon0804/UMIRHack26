@@ -198,8 +198,7 @@ export function CertificatePage() {
             <div
               ref={ref}
               id="certificate-document"
-              className="relative w-full max-w-[920px] overflow-hidden rounded-sm border-[3px] border-stone-800 bg-white text-stone-900 shadow-2xl print:max-w-none print:border-stone-900 print:shadow-none"
-              style={{ aspectRatio: "297 / 210" }}
+              className="relative w-full max-w-[920px] rounded-sm border-[3px] border-stone-800 bg-white text-stone-900 shadow-2xl print:max-w-none print:border-stone-900 print:shadow-none"
             >
               <div
                 className="pointer-events-none absolute inset-0 opacity-[0.07]"
