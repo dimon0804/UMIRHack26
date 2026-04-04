@@ -1,4 +1,6 @@
-FROM python:3.12-slim
+# Override via compose: PYTHON_BASE_IMAGE=public.ecr.aws/docker/library/python:3.12-slim (if Hub fails) or your registry mirror.
+ARG PYTHON_BASE_IMAGE=python:3.12-slim
+FROM ${PYTHON_BASE_IMAGE}
 
 WORKDIR /app
 

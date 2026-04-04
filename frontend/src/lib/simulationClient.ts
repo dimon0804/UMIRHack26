@@ -6,11 +6,41 @@ export type ApiScenarioListItem = {
 
 export type ApiScenarioChoice = { id: string; label: string };
 
+/** Ссылки для отдельной страницы link-lab (смешанные легитимные / учебный фишинг) */
+export type ApiTrainingLink = {
+  id: string;
+  href: string;
+  label?: string;
+  is_phishing: boolean;
+  /** Для link-lab: подмена «темы» на фейковой странице (иначе берётся письмо/чат целиком). */
+  breach_subject?: string;
+  breach_preview?: string;
+};
+
+export type ApiDynamicDifficulty = {
+  tier: number;
+  skill_score: number;
+};
+
+/** Симуляция звонка (vishing): TTS или готовая дорожка + разметка времени */
+export type ApiVoiceCall = {
+  mode: "tts" | "audio";
+  /** Подпись в UI («Входящий звонок») */
+  label?: string;
+  /** Путь к файлу (например /vishing/track.mp3) при mode=audio */
+  audio_src?: string;
+  /** Секунды начала реплики i (порядок как у сообщений peer); для синхронной подсветки */
+  cues_sec?: number[];
+  pause_between_ms?: number;
+};
+
 export type ApiScenarioMeta = {
   step: number;
   total_steps: number;
   narrative_arc?: string;
   attack_family?: string;
+  /** С simulation-service при LLM-сценарии: адаптация сложности по прогрессу */
+  dynamic_difficulty?: ApiDynamicDifficulty;
 };
 
 export type ApiEmailScenario = ApiScenarioMeta & {
@@ -24,6 +54,7 @@ export type ApiEmailScenario = ApiScenarioMeta & {
   body_paragraphs: string[];
   cta_label: string;
   cta_href_display: string;
+  training_links?: ApiTrainingLink[];
   choices: ApiScenarioChoice[];
 };
 
@@ -34,7 +65,9 @@ export type ApiChatScenario = ApiScenarioMeta & {
   peer_name: string;
   peer_handle: string;
   messages: { from: "peer" | "me"; text: string; time: string }[];
+  training_links?: ApiTrainingLink[];
   choices: ApiScenarioChoice[];
+  voice_call?: ApiVoiceCall;
 };
 
 export type ApiWifiNetwork = { ssid: string; secured: boolean; note?: string };
@@ -120,10 +153,13 @@ export async function fetchSimulationScenario(
   lang: "ru" | "en",
   step: number,
   accessToken?: string | null,
+  /** «Новый вариант ИИ»: бэкенд снова дергает LLM (агрегаты phishing-mail / se-chat). */
+  refreshLlm = false,
 ): Promise<{ scenario: ApiScenarioUnion }> {
+  const refreshQ = refreshLlm ? "&refresh=true" : "";
   const r = await fetch(
     apiPath(
-      `/api/v1/simulation/scenarios/${encodeURIComponent(id)}?lang=${lang}&step=${step}`,
+      `/api/v1/simulation/scenarios/${encodeURIComponent(id)}?lang=${lang}&step=${step}${refreshQ}`,
     ),
     { cache: "no-store", headers: authHeaders(lang, accessToken) },
   );

@@ -25,6 +25,16 @@
 }
 
 @layer components {
+  /* Учебная «CRT»-сетка для оверлеев (только визуал) */
+  .soc-scanlines {
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgb(255 255 255 / 0.04) 2px,
+      rgb(255 255 255 / 0.04) 4px
+    );
+  }
   .card-brutal {
     box-shadow:
       0 1px 3px 0 rgb(0 0 0 / 0.04),
@@ -185,6 +195,128 @@
   /* Градиентный заголовок */
   .text-gradient-moss {
     @apply bg-gradient-to-r from-emerald-800 via-teal-700 to-emerald-900 bg-clip-text text-transparent dark:from-emerald-300 dark:via-teal-300 dark:to-emerald-400;
+  }
+}
+
+/* Учебный «взлом»: фон, матрица, глитч (только оформление) */
+@layer utilities {
+  .theater-vignette {
+    background: radial-gradient(ellipse 80% 70% at 50% 45%, transparent 0%, rgb(0 0 0 / 0.65) 100%);
+  }
+  .theater-grid-bg {
+    background-image:
+      linear-gradient(rgb(16 185 129 / 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(16 185 129 / 0.06) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .theater-grid-bg-motion {
+      animation: theater-grid-drift 24s linear infinite;
+    }
+  }
+  .theater-matrix-rain {
+    font-family: ui-monospace, monospace;
+    font-size: 9px;
+    line-height: 1.15;
+    color: rgb(34 197 94 / 0.35);
+    text-shadow: 0 0 8px rgb(34 197 94 / 0.4);
+    user-select: none;
+    white-space: pre;
+    overflow: hidden;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .theater-matrix-col {
+      animation: theater-matrix-fall linear infinite;
+    }
+  }
+  .theater-hex-scroll {
+    mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .theater-hex-scroll-inner {
+      animation: theater-hex-drift 18s linear infinite;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .theater-glitch-shake {
+      animation: theater-glitch 0.15s steps(2) 1;
+    }
+  }
+  .theater-scan-sweep {
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgb(34 197 94 / 0.07) 50%,
+      transparent 100%
+    );
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .theater-scan-sweep-motion {
+      animation: theater-scan 4.5s ease-in-out infinite;
+    }
+  }
+}
+
+@keyframes theater-grid-drift {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 24px 24px;
+  }
+}
+
+@keyframes theater-matrix-fall {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes theater-hex-drift {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes theater-glitch {
+  0% {
+    transform: translate(0);
+    filter: hue-rotate(0deg);
+  }
+  25% {
+    transform: translate(-2px, 1px);
+    filter: hue-rotate(90deg);
+  }
+  50% {
+    transform: translate(2px, -1px);
+  }
+  100% {
+    transform: translate(0);
+    filter: hue-rotate(0deg);
+  }
+}
+
+@keyframes theater-scan {
+  0%,
+  100% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(100vh);
+    opacity: 0.6;
+  }
+  85% {
+    opacity: 1;
   }
 }
 

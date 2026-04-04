@@ -15,8 +15,14 @@ import {
 } from "@/lib/customScenarioClient";
 import { fetchSimulationScenarioList, type ApiScenarioListItem } from "@/lib/simulationClient";
 
-function ScenarioIcon({ type }: { type: ApiScenarioListItem["type"] }) {
+function ScenarioIcon({ type, scenarioId }: { type: ApiScenarioListItem["type"]; scenarioId?: string }) {
   const cls = "size-10 text-emerald-700 dark:text-emerald-400/90";
+  if (scenarioId?.startsWith("vishing-"))
+    return (
+      <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
+      </svg>
+    );
   if (type === "email")
     return (
       <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
@@ -160,6 +166,22 @@ export function DashboardPage() {
         </p>
       ) : null}
 
+      <section className="mt-8 rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50/90 to-cyan-50/40 p-5 shadow-sm dark:border-sky-900/40 dark:from-sky-950/30 dark:to-cyan-950/20">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-sky-700 dark:text-sky-400">
+          {t("dashboard.linkLabKicker")}
+        </p>
+        <h2 className="mt-1 font-display text-lg font-semibold text-ink dark:text-stone-100">{t("dashboard.linkLabTitle")}</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-stone-600 dark:text-stone-400">{t("dashboard.linkLabSub")}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link to="/link-lab" className="btn-primary !text-xs !no-underline">
+            {t("dashboard.linkLabMail")}
+          </Link>
+          <Link to="/link-lab?mode=chat" className="btn-ghost !text-xs !no-underline">
+            {t("dashboard.linkLabChat")}
+          </Link>
+        </div>
+      </section>
+
       <div className="mt-12 grid gap-8 motion-safe:animate-fade-in-up lg:grid-cols-3 [animation-delay:90ms]">
         <section className="card-brutal p-6 lg:col-span-2">
           <h2 className="font-display text-lg font-semibold text-ink dark:text-stone-100">
@@ -219,7 +241,7 @@ export function DashboardPage() {
                     <div
                       className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/80 ring-1 ring-emerald-100/90 dark:from-emerald-950/60 dark:to-teal-950/30 dark:ring-emerald-900/50"
                     >
-                      <ScenarioIcon type={s.type} />
+                      <ScenarioIcon type={s.type} scenarioId={s.id} />
                     </div>
                     <div>
                       <h3 className="flex flex-wrap items-center gap-2 font-display text-base font-medium text-ink dark:text-stone-100">

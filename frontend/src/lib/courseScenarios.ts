@@ -22,6 +22,12 @@ export function isCustomSimulationId(id: string): boolean {
   return CUSTOM_SCENARIO_ID_RE.test(id);
 }
 
+const VISHING_SCENARIO_IDS = ["vishing-bank", "vishing-it", "vishing-courier"] as const;
+
+export function isVishingSimulationId(id: string): boolean {
+  return (VISHING_SCENARIO_IDS as readonly string[]).includes(id);
+}
+
 export function isPlayableSimulationId(id: string): boolean {
-  return isSimulationScenarioId(id) || isCustomSimulationId(id);
+  return isSimulationScenarioId(id) || isCustomSimulationId(id) || isVishingSimulationId(id);
 }

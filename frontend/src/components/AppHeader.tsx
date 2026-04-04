@@ -53,6 +53,7 @@ export function AppHeader() {
   const hpPct = userState.hp;
   const nav = [
     { to: "/dashboard", label: t("header.pulse") },
+    { to: "/live-soc", label: t("header.liveSoc") },
     { to: "/leaderboard", label: t("header.leaderboard") },
     { to: "/profile", label: t("header.profile") },
     { to: "/certificate", label: t("header.cert") },

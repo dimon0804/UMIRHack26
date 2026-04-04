@@ -51,7 +51,10 @@ services:
     build:
       context: ./backend/auth-service
       dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.12-slim}
     environment:
+      REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cyberapp}:${POSTGRES_PASSWORD:-cyberapp_secret_change_me}@postgres:5432/auth_db
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-in-production-min-32-chars}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
@@ -69,7 +72,10 @@ services:
     build:
       context: ./backend/simulation-service
       dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.12-slim}
     environment:
+      REDIS_URL: redis://redis:6379/0
       AI_SERVICE_URL: http://ai-service:8000
       PROGRESS_SERVICE_URL: http://progress-service:8000
       SIMULATION_LLM_SCENARIOS: ${SIMULATION_LLM_SCENARIOS:-true}
@@ -86,6 +92,8 @@ services:
     build:
       context: ./backend/ai-service
       dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.12-slim}
     environment:
       LLM_MODE: ${LLM_MODE:-mistral_sdk}
       MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
@@ -107,7 +115,10 @@ services:
     build:
       context: ./backend/progress-service
       dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.12-slim}
     environment:
+      REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cyberapp}:${POSTGRES_PASSWORD:-cyberapp_secret_change_me}@postgres:5432/progress_db
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-in-production-min-32-chars}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
@@ -129,7 +140,10 @@ services:
     build:
       context: ./backend/gateway
       dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.12-slim}
     environment:
+      REDIS_URL: redis://redis:6379/0
       AUTH_SERVICE_URL: http://auth-service:8000
       SIMULATION_SERVICE_URL: http://simulation-service:8000
       AI_SERVICE_URL: http://ai-service:8000
@@ -140,6 +154,8 @@ services:
     ports:
       - "${GATEWAY_PORT:-8000}:8000"
     depends_on:
+      redis:
+        condition: service_healthy
       auth-service:
         condition: service_started
       progress-service:

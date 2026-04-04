@@ -23,6 +23,15 @@
       ]
     },
     {
+      "name": "Live SOC",
+      "item": [
+        {
+          "name": "SOC stats",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/soc/stats" }
+        }
+      ]
+    },
+    {
       "name": "Auth",
       "item": [
         {

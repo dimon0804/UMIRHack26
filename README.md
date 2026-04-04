@@ -49,6 +49,8 @@ docs/                # Архитектура, ER, OpenAPI, Postman, OWASP/CWE/A
 | GET/POST | `/api/v1/progress/custom-scenarios` | Каталог пользовательских AI-кейсов (Bearer) |
 | DELETE | `/api/v1/progress/custom-scenarios/{cs-mail-…\|cs-chat-…}` | Удалить кейс (Bearer) |
 | POST | `/api/v1/ai/generate-scenario` | Сгенерировать JSON сценария почты или чата (для сохранения в custom-scenarios) |
+| GET | `/api/v1/soc/stats` | Счётчики Live SOC Wall |
+| WS | `/api/v1/soc/ws` | Поток событий для страницы `/live-soc` (Redis pub/sub) |
 
 Поток «новый кейс»: `POST /api/v1/ai/generate-scenario` → `POST /api/v1/progress/custom-scenarios` с `{ "scenario": … }` → в UI появляется строка с id `cs-mail-…` / `cs-chat-…`; `GET/POST …/simulation/scenarios/…` для игры передаёт **тот же Bearer**. В Docker у **simulation-service** должен быть `PROGRESS_SERVICE_URL` (уже в `docker-compose.yml`).
 

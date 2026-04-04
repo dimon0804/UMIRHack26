@@ -24,6 +24,13 @@ def _svc(session: AsyncSession) -> AuthService:
     return AuthService(session)
 
 
+def _email_domain(email: str) -> str:
+    e = (email or "").strip().lower()
+    if "@" not in e:
+        return "unknown"
+    return e.split("@", 1)[-1][:48]
+
+
 def _app_error_response(request: Request, e: AppError) -> HTTPException:
     locale = pick_locale(request)
     return HTTPException(
@@ -39,17 +46,37 @@ def _app_error_response(request: Request, e: AppError) -> HTTPException:
 @router.post("/register", response_model=TokenPairResponse)
 async def register(request: Request, body: RegisterRequest, session: AsyncSession = Depends(get_db)) -> TokenPairResponse:
     try:
-        return await _svc(session).register(body)
+        out = await _svc(session).register(body)
     except AppError as e:
         raise _app_error_response(request, e) from e
+    try:
+        from app.integrations.soc_redis import emit_soc_event
+
+        emit_soc_event(
+            "auth_register",
+            {"email_domain": _email_domain(body.email), "locale": body.locale},
+        )
+    except Exception:
+        pass
+    return out
 
 
 @router.post("/login", response_model=TokenPairResponse)
 async def login(request: Request, body: LoginRequest, session: AsyncSession = Depends(get_db)) -> TokenPairResponse:
     try:
-        return await _svc(session).login(body)
+        out = await _svc(session).login(body)
     except AppError as e:
         raise _app_error_response(request, e) from e
+    try:
+        from app.integrations.soc_redis import emit_soc_event
+
+        emit_soc_event(
+            "auth_login",
+            {"email_domain": _email_domain(body.email), "locale": pick_locale(request)},
+        )
+    except Exception:
+        pass
+    return out
 
 
 @router.post("/refresh", response_model=TokenPairResponse)

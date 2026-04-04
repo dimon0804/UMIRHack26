@@ -143,21 +143,111 @@ Shape:
 choices: exactly 4 items; ids MUST be send_codes, callback, official_channel, ignore."""
 
 
+def _difficulty_email_ru(tier: int, skill: int) -> str:
+    if tier <= 0:
+        return (
+            f"Уровень сложности: базовый (оценка игрока {skill}/100). "
+            "Сделай заметные красные флаги: явный чужой домен, грубая срочность, типичный развод."
+        )
+    if tier == 1:
+        return (
+            f"Уровень: чуть сложнее ({skill}/100). "
+            "Домен похож на корпоративный (опечатка/поддомен), умеренный pretext, без капса во всём письме."
+        )
+    if tier == 2:
+        return (
+            f"Уровень: продвинутый ({skill}/100). "
+            "Письмо как внутренняя процедура или партнёрский запрос; домен правдоподобный; срочность завуалирована "
+            "(дедлайн сегодня, «ответьте в течение часа» без истерики)."
+        )
+    return (
+        f"Уровень: эксперт ({skill}/100). "
+        "Максимально тонко: authority bias, ссылка на реальные процессы (без реальных брендов), "
+        "lookalike-домен, социальное давление без штампованного фишинга; один флаг можно спрятать в деталях."
+    )
+
+
+def _difficulty_email_en(tier: int, skill: int) -> str:
+    if tier <= 0:
+        return (
+            f"Difficulty: baseline (player skill {skill}/100). "
+            "Clear red flags: suspicious domain, blunt urgency, classic scam tone."
+        )
+    if tier == 1:
+        return (
+            f"Difficulty: moderate ({skill}/100). "
+            "Corporate-lookalike domain typo/subdomain, mild pretext, avoid screaming caps."
+        )
+    if tier == 2:
+        return (
+            f"Difficulty: advanced ({skill}/100). "
+            "Internal-style or vendor thread; plausible domain; urgency is understated (same-day deadline)."
+        )
+    return (
+        f"Difficulty: expert ({skill}/100). "
+        "Subtle authority and process references (fictional orgs only), lookalike domain, pressure without clichés; "
+        "one trap can be easy to miss."
+    )
+
+
+def _difficulty_chat_ru(tier: int, skill: int) -> str:
+    if tier <= 0:
+        return (
+            f"Уровень: базовый ({skill}/100). Явный фейковый коллега/IT, грубый запрос кодов или пароля."
+        )
+    if tier == 1:
+        return (
+            f"Уровень: средний ({skill}/100). Знакомый тон, но мелкие несостыковки в должности или срочности."
+        )
+    if tier == 2:
+        return (
+            f"Уровень: высокий ({skill}/100). Pretext «срочно закрыть тикет», ссылка на «внутренний» канал, "
+            "без прямого «отправь пароль»."
+        )
+    return (
+        f"Уровень: эксперт ({skill}/100). "
+        "Тон как у реального руководителя/партнёра; просьба косвенная (переключись на личный номер, «напиши в личку»); "
+        "минимум триггерных слов."
+    )
+
+
+def _difficulty_chat_en(tier: int, skill: int) -> str:
+    if tier <= 0:
+        return f"Difficulty: baseline ({skill}/100). Obvious fake peer/IT, blunt ask for codes/password."
+    if tier == 1:
+        return (
+            f"Difficulty: moderate ({skill}/100). Friendly tone, small inconsistencies in role or urgency."
+        )
+    if tier == 2:
+        return (
+            f"Difficulty: advanced ({skill}/100). Pretext of closing a ticket; nudge to alternate channel; "
+            "no direct 'send your password'."
+        )
+    return (
+        f"Difficulty: expert ({skill}/100). "
+        "Executive/partner tone; indirect ask (switch to personal line, DM); avoid obvious trigger words."
+    )
+
+
 async def generate_training_scenario(body: ScenarioGenerateRequest) -> ScenarioGenerateResponse:
     roll = body.diversity_roll
+    tier = body.difficulty_tier
+    skill = body.skill_score
     if body.scenario_type == "email":
         sys = _SYSTEM_EMAIL_RU if body.locale == "ru" else _SYSTEM_EMAIL_EN
+        diff = _difficulty_email_ru(tier, skill) if body.locale == "ru" else _difficulty_email_en(tier, skill)
         user = (
-            f"Случайное зерно: {roll}. Придумай новый нешаблонный сюжет письма."
+            f"Случайное зерно: {roll}. {diff} Придумай новый нешаблонный сюжет письма."
             if body.locale == "ru"
-            else f"Random seed: {roll}. Invent a fresh, non-templated premise."
+            else f"Random seed: {roll}. {diff} Invent a fresh, non-templated premise."
         )
     else:
         sys = _SYSTEM_CHAT_RU if body.locale == "ru" else _SYSTEM_CHAT_EN
+        diff = _difficulty_chat_ru(tier, skill) if body.locale == "ru" else _difficulty_chat_en(tier, skill)
         user = (
-            f"Случайное зерно: {roll}. Придумай новую ситуацию в чате (другой предлог, чем в типовых примерах)."
+            f"Случайное зерно: {roll}. {diff} Придумай новую ситуацию в чате (другой предлог, чем в типовых примерах)."
             if body.locale == "ru"
-            else f"Random seed: {roll}. Create a new chat premise distinct from common clichés."
+            else f"Random seed: {roll}. {diff} Create a new chat premise distinct from common clichés."
         )
 
     req = ChatRequest(

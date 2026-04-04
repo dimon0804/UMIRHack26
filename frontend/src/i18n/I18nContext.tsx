@@ -36,11 +36,8 @@ function readStoredLocale(): AppLocale {
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<AppLocale>("ru");
-
-  useEffect(() => {
-    setLocaleState(readStoredLocale());
-  }, []);
+  /** Сразу из storage — иначе первый кадр «ru», потом смена локали перезапрашивает сценарии (LLM шаг 1). */
+  const [locale, setLocaleState] = useState<AppLocale>(() => readStoredLocale());
 
   const setLocale = useCallback((l: AppLocale) => {
     setLocaleState(l);

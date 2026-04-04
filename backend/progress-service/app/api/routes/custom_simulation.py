@@ -113,6 +113,15 @@ async def create_custom(
     await session.commit()
 
     ext = _external_id(kind, cid)
+    try:
+        from app.integrations.soc_redis import emit_soc_event
+
+        emit_soc_event(
+            "custom_case",
+            {"scenario_id": ext, "case_type": "email" if kind == "mail" else "chat"},
+        )
+    except Exception:
+        pass
     return CreateCustomScenarioResponse(
         id=ext,
         type="email" if kind == "mail" else "chat",

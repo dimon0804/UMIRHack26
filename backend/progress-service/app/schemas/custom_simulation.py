@@ -12,6 +12,16 @@ class ScenarioChoice(BaseModel):
     label: str
 
 
+class TrainingLinkIn(BaseModel):
+    id: str
+    href: str
+    label: str = ""
+    is_phishing: bool = False
+    # Текст учебной «ловушки» для link-lab (подмена темы письма на /breach)
+    breach_subject: str | None = None
+    breach_preview: str | None = None
+
+
 class ChatMessageIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -30,6 +40,7 @@ class EmailScenarioPayload(BaseModel):
     body_paragraphs: list[str] = Field(min_length=2, max_length=6)
     cta_label: str
     cta_href_display: str
+    training_links: list[TrainingLinkIn] | None = Field(default=None, max_length=12)
     choices: list[ScenarioChoice]
 
     @field_validator("choices")
@@ -48,6 +59,7 @@ class ChatScenarioPayload(BaseModel):
     peer_name: str
     peer_handle: str
     messages: list[ChatMessageIn] = Field(min_length=1, max_length=4)
+    training_links: list[TrainingLinkIn] | None = None
     choices: list[ScenarioChoice]
 
     @field_validator("choices")

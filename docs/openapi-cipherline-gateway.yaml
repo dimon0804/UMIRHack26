@@ -4,6 +4,7 @@ info:
   description: |
     Единое описание публичных маршрутов за `API Gateway` (базовый URL, например `http://localhost:8000`).
     Внутренние `/docs` отдельных сервисов дублируют детали; этот файл — для жюри и интеграций.
+    **Live SOC Wall:** WebSocket `ws://<host>/api/v1/soc/ws?team=...` (снимок `_snapshot`, потом события); см. UI `/live-soc`.
   version: "1.0.0"
 
 servers:
@@ -16,6 +17,7 @@ tags:
   - name: simulation
   - name: progress
   - name: ai
+  - name: soc
 
 paths:
   /health:
@@ -40,6 +42,14 @@ paths:
       responses:
         "200":
           description: OK
+
+  /api/v1/soc/stats:
+    get:
+      tags: [soc]
+      summary: Счётчики Live SOC Wall (Redis) и число зрителей WebSocket
+      responses:
+        "200":
+          description: stats (hash), live_viewers, redis flag
 
   /api/v1/auth/register:
     post:
@@ -138,6 +148,9 @@ paths:
       description: |
         Для пользовательских AI-кейсов `scenario_id` вида `cs-mail-{uuid}` или `cs-chat-{uuid}` нужен заголовок
         **Authorization: Bearer** (тот же access-токен); simulation-service подгружает тело из progress-service.
+        Для типов `email` и `chat` в ответе может быть опциональное поле `training_links` — массив объектов
+        `{ id, href, label?, is_phishing, breach_subject?, breach_preview? }` для тренажёра ссылок (`/link-lab` или `/sim/run/:id/link-lab`);
+        опциональные `breach_*` задают текст учебной «ловушки» для конкретной ссылки (тип формы / театра).
       parameters:
         - in: path
           name: scenario_id
@@ -149,6 +162,10 @@ paths:
         - in: query
           name: lang
           schema: { type: string, enum: [ru, en] }
+        - in: query
+          name: refresh
+          description: Новый вариант от LLM для агрегатов phishing-mail и se-chat (любой step)
+          schema: { type: boolean, default: false }
       responses:
         "200":
           description: Контекст и варианты ответа

@@ -13,6 +13,8 @@ async def fetch_llm_scenario(
     aggregate_id: str,
     scenario_type: str,
     locale: str,
+    difficulty_tier: int = 0,
+    skill_score: int = 0,
 ) -> dict | None:
     """
     Запрос к ai-service /generate-scenario. Возвращает dict сценария (без id) или None при ошибке.
@@ -23,10 +25,13 @@ async def fetch_llm_scenario(
         return None
 
     url = f"{base}/generate-scenario"
+    tier = max(0, min(3, int(difficulty_tier)))
     payload = {
         "scenario_type": scenario_type,
         "locale": locale if locale in ("ru", "en") else "ru",
         "diversity_roll": random.randint(0, 999_999),
+        "difficulty_tier": tier,
+        "skill_score": max(0, min(100, int(skill_score))),
     }
 
     timeout = httpx.Timeout(connect=10.0, read=90.0, write=10.0, pool=10.0)

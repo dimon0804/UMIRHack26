@@ -16,10 +16,40 @@ from app.scenario_narrative import (
     scenario_action_cards,
     scenario_skimming,
 )
+from app.services.player_skill import fetch_player_skill_profile
 from app.services.progress_payload import fetch_custom_scenario_payload, is_custom_scenario_id
 from app.services.scenario_llm_client import fetch_llm_scenario
 
 router = APIRouter(prefix="/scenarios", tags=["simulator"])
+
+
+def _soc_region(scenario_id: str, choice_id: str) -> str:
+    x = (hash(scenario_id) ^ hash(choice_id)) % 4
+    return ("NA", "EU", "APAC", "MEA")[x]
+
+
+def _emit_sim_soc(scenario_id: str, step: int, choice_id: str, result: dict) -> None:
+    from app.integrations.soc_redis import emit_soc_event
+
+    is_safe = bool(result.get("is_safe", True))
+    severity = str(result.get("severity", "none"))
+    tags: list[str] = []
+    if choice_id == "report":
+        tags.append("user_report")
+    if choice_id in ("open_link", "send_codes", "install_portal_offer", "connect_strongest_unverified") and not is_safe:
+        tags.append("risk_click")
+    emit_soc_event(
+        "sim_submit",
+        {
+            "scenario_id": scenario_id,
+            "step": step,
+            "choice_id": choice_id,
+            "is_safe": is_safe,
+            "severity": severity,
+            "tags": tags,
+            "region": _soc_region(scenario_id, choice_id),
+        },
+    )
 
 Locale = Literal["ru", "en"]
 
@@ -63,11 +93,17 @@ MAIL_SCENARIO_IDS: tuple[str, ...] = (
     "phishing-mail-payroll",
 )
 
+VISHING_SCENARIO_IDS: tuple[str, ...] = (
+    "vishing-bank",
+    "vishing-it",
+    "vishing-courier",
+)
+
 CHAT_SCENARIO_IDS: tuple[str, ...] = (
     "se-chat-gifts",
     "se-chat-wire",
     "se-chat-it",
-)
+) + VISHING_SCENARIO_IDS
 
 WIFI_SCENARIO_IDS: tuple[str, ...] = (
     "wifi-cafe",
@@ -157,8 +193,10 @@ async def _scenario_for_get(
     locale: Locale,
     step: int = 1,
     authorization: str | None = None,
+    *,
+    refresh_llm: bool = False,
 ) -> dict | None:
-    """GET сценария для шага step (1..5); почта/чат — Mistral только на шаге 1."""
+    """GET сценария для шага step (1..5); почта/чат — LLM по умолчанию на шаге 1, при refresh_llm — на любом шаге."""
     sid = _canonical_id(scenario_id)
     step = _clamp_step(step)
 
@@ -195,19 +233,29 @@ async def _scenario_for_get(
         }
 
     if sid == AGGREGATE_MAIL_ID:
-        if step == 1:
+        if step == 1 or refresh_llm:
+            skill = await fetch_player_skill_profile(authorization)
             llm = await fetch_llm_scenario(
                 aggregate_id=AGGREGATE_MAIL_ID,
                 scenario_type="email",
                 locale=locale,
+                difficulty_tier=int(skill.get("difficulty_tier") or 0),
+                skill_score=int(skill.get("skill_score") or 0),
             )
             if llm:
                 out = dict(llm)
                 out["id"] = AGGREGATE_MAIL_ID
-                out["step"] = 1
+                out["step"] = step
                 out["total_steps"] = NARRATIVE_TOTAL_STEPS
-                out["narrative_arc"] = _home_arc(locale, 1)
-                out["attack_family"] = _home_attack(1)
+                out["narrative_arc"] = _home_arc(locale, step)
+                out["attack_family"] = _home_attack(step)
+                out["dynamic_difficulty"] = {
+                    "tier": int(skill.get("difficulty_tier") or 0),
+                    "skill_score": int(skill.get("skill_score") or 0),
+                }
+                # Тренажёр нескольких ссылок (link-lab): у LLM в JSON поля нет — подмешиваем как у банковского шаблона
+                if out.get("type") == "email":
+                    out["training_links"] = _training_links_mail_bank(locale)
                 return out
         tid = _HOME_STEP_TEMPLATE[step - 1]
         base = _scenario_by_id(tid, locale)
@@ -222,19 +270,28 @@ async def _scenario_for_get(
         return out
 
     if sid == AGGREGATE_CHAT_ID:
-        if step == 1:
+        if step == 1 or refresh_llm:
+            skill = await fetch_player_skill_profile(authorization)
             llm = await fetch_llm_scenario(
                 aggregate_id=AGGREGATE_CHAT_ID,
                 scenario_type="chat",
                 locale=locale,
+                difficulty_tier=int(skill.get("difficulty_tier") or 0),
+                skill_score=int(skill.get("skill_score") or 0),
             )
             if llm:
                 out = dict(llm)
                 out["id"] = AGGREGATE_CHAT_ID
-                out["step"] = 1
+                out["step"] = step
                 out["total_steps"] = NARRATIVE_TOTAL_STEPS
-                out["narrative_arc"] = _office_arc(locale, 1)
-                out["attack_family"] = _office_attack(1)
+                out["narrative_arc"] = _office_arc(locale, step)
+                out["attack_family"] = _office_attack(step)
+                out["dynamic_difficulty"] = {
+                    "tier": int(skill.get("difficulty_tier") or 0),
+                    "skill_score": int(skill.get("skill_score") or 0),
+                }
+                if out.get("type") == "chat":
+                    out["training_links"] = _training_links_chat_it(locale)
                 return out
         tid = _OFFICE_STEP_TEMPLATE[step - 1]
         base = _scenario_by_id(tid, locale)
@@ -843,6 +900,160 @@ def _choices_chat_it(locale: Locale) -> list[dict[str, str]]:
     ]
 
 
+def _training_links_mail_bank(locale: Locale) -> list[dict[str, object]]:
+    """Четыре разные «пришедшие» ссылки: 2 условно легитимных, 2 фишинга с разным типом ловушки."""
+    if locale == "en":
+        return [
+            {
+                "id": "tl-mail-safe-docs",
+                "href": "https://sharepoint.corp.example.com/sites/q4-review/shared",
+                "label": "Shared folder — Q4 review (internal example)",
+                "is_phishing": False,
+            },
+            {
+                "id": "tl-mail-safe-lms",
+                "href": "https://learn.corp.example.com/security/phishing-basics",
+                "label": "Enroll: phishing awareness micro-course (LMS example)",
+                "is_phishing": False,
+            },
+            {
+                "id": "tl-mail-phish-parcel",
+                "href": "https://logifast-parcel-reschedule.net/track?id=US-88421",
+                "label": "Delivery failed — reschedule window (carrier message)",
+                "is_phishing": True,
+                "breach_subject": "Shipment US-88421: pay $1.99 processing to unlock tracking",
+                "breach_preview": (
+                    "We could not complete delivery. Pay a small customs/processing fee by card to confirm your "
+                    "address and unlock tracking. After payment you can pick a new time slot."
+                ),
+            },
+            {
+                "id": "tl-mail-phish-wifi",
+                "href": "https://office-guest-wifi-portal.xyz/connect",
+                "label": "Office guest Wi‑Fi — portal login (building lobby poster)",
+                "is_phishing": True,
+                "breach_subject": "Connect to OFFICE-GUEST secure network",
+                "breach_preview": (
+                    "Enter the visitor code from reception, then your phone number and the Wi‑Fi password printed on "
+                    "the router label so we can bind your device to the guest SSID."
+                ),
+            },
+        ]
+    return [
+        {
+            "id": "tl-mail-safe-docs",
+            "href": "https://sharepoint.corp.example.com/sites/q4-review/shared",
+            "label": "Файлы для согласования — общая папка SharePoint (пример)",
+            "is_phishing": False,
+        },
+        {
+            "id": "tl-mail-safe-lms",
+            "href": "https://learn.corp.example.com/security/phishing-basics",
+            "label": "Запись на курс «Распознавание фишинга» — корпоративный LMS",
+            "is_phishing": False,
+        },
+        {
+            "id": "tl-mail-phish-parcel",
+            "href": "https://logifast-parcel-reschedule.ru/track?id=RU-88421",
+            "label": "Курьер не доставил посылку — переназначьте интервал",
+            "is_phishing": True,
+            "breach_subject": "Отправление RU-88421: оплатите оформление 99 ₽ для выбора даты",
+            "breach_preview": (
+                "Отслеживание посылки приостановлено. Оплатите услугу повторной доставки картой, чтобы подтвердить "
+                "адрес и открыть календарь интервалов. Таможенное оформление уже включено в сумму."
+            ),
+        },
+        {
+            "id": "tl-mail-phish-wifi",
+            "href": "https://office-guest-wifi-portal.xyz/connect",
+            "label": "Гостевой Wi‑Fi в офисе — вход через портал (как на стикере)",
+            "is_phishing": True,
+            "breach_subject": "Подключение к сети OFFICE-GUEST",
+            "breach_preview": (
+                "Введите код с ресепшена, номер телефона и пароль с наклейки роутера — так система привяжет ваше "
+                "устройство к гостевому SSID. Без этого доступ к интернету не откроется."
+            ),
+        },
+    ]
+
+
+def _training_links_chat_it(locale: Locale) -> list[dict[str, object]]:
+    """Чат: четыре ссылки разного сценария — документация, встреча, фишинг «файл», фишинг «подпись/счёт»."""
+    if locale == "en":
+        return [
+            {
+                "id": "tl-chat-safe-wiki",
+                "href": "https://confluence.corp.example.com/display/IT/password-policy",
+                "label": "IT wiki — password policy (bookmark)",
+                "is_phishing": False,
+            },
+            {
+                "id": "tl-chat-safe-meet",
+                "href": "https://meet.corp.example.com/b/standup-930",
+                "label": "Daily standup — internal video room",
+                "is_phishing": False,
+            },
+            {
+                "id": "tl-chat-phish-file",
+                "href": "https://shared-file-secure.io/download?f=q3_bonus.xlsx",
+                "label": "“HR sent a spreadsheet” — open in browser",
+                "is_phishing": True,
+                "breach_subject": "Q3 bonus breakdown — unlock protected workbook",
+                "breach_preview": (
+                    "The file is encrypted for your email. Enter your corporate password and approve the sign-in prompt "
+                    "so we can verify you before showing payroll figures."
+                ),
+            },
+            {
+                "id": "tl-chat-phish-sign",
+                "href": "https://docusign-docs-verify.net/sign/contract-7721",
+                "label": "Contract awaiting signature (external)",
+                "is_phishing": True,
+                "breach_subject": "Invoice INV-7721 — sign & pay verification hold",
+                "breach_preview": (
+                    "A vendor invoice is attached. Pay a €1 verification charge by card to release the DocuSign "
+                    "envelope — this matches our anti-fraud policy for first-time contractors."
+                ),
+            },
+        ]
+    return [
+        {
+            "id": "tl-chat-safe-wiki",
+            "href": "https://confluence.corp.example.com/display/IT/password-policy",
+            "label": "Внутренняя wiki — политика паролей (закладка коллеги)",
+            "is_phishing": False,
+        },
+        {
+            "id": "tl-chat-safe-meet",
+            "href": "https://meet.corp.example.com/b/standup-930",
+            "label": "Ежедневный стендап — корпоративная видеокомната",
+            "is_phishing": False,
+        },
+        {
+            "id": "tl-chat-phish-file",
+            "href": "https://shared-file-secure.io/download?f=q3_bonus.xlsx",
+            "label": "«HR прислала таблицу» — открыть в браузере",
+            "is_phishing": True,
+            "breach_subject": "Файл с премией Q3 — снимите защиту книги Excel",
+            "breach_preview": (
+                "Книга зашифрована под вашу почту. Введите корпоративный пароль и подтвердите вход, чтобы мы "
+                "убедились, что это вы, прежде чем показать суммы по премиям."
+            ),
+        },
+        {
+            "id": "tl-chat-phish-sign",
+            "href": "https://docusign-docs-verify.net/sign/dogovor-7721",
+            "label": "Договор на подпись (внешняя ссылка)",
+            "is_phishing": True,
+            "breach_subject": "Счёт № INV-7721 — оплатите проверочный платёж для подписания",
+            "breach_preview": (
+                "К договору приложен счёт подрядчика. Укажите данные карты для верификационного платежа 1 € — так "
+                "мы отпускаем конверт DocuSign по правилам антифрода для новых контрагентов."
+            ),
+        },
+    ]
+
+
 def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
     sid = _canonical_id(scenario_id)
 
@@ -863,6 +1074,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                 ],
                 "cta_label": "Verify my device",
                 "cta_href_display": "https://securebank-updates.net/verify?session=7f3a…",
+                "training_links": _training_links_mail_bank(locale),
                 "choices": _choices_mail(locale),
             }
         return {
@@ -880,6 +1092,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
             ],
             "cta_label": "Подтвердить устройство",
             "cta_href_display": "https://securebank-updates.net/verify?session=7f3a…",
+            "training_links": _training_links_mail_bank(locale),
             "choices": _choices_mail(locale),
         }
 
@@ -900,6 +1113,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                 ],
                 "cta_label": "Pay fee & track parcel",
                 "cta_href_display": "https://globalpost-track.support/pay?id=GP88421…",
+                "training_links": _training_links_mail_bank(locale),
                 "choices": _choices_mail(locale),
             }
         return {
@@ -917,6 +1131,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
             ],
             "cta_label": "Оплатить и отследить",
             "cta_href_display": "https://globalpost-track.support/pay?id=GP88421…",
+            "training_links": _training_links_mail_bank(locale),
             "choices": _choices_mail(locale),
         }
 
@@ -937,6 +1152,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                 ],
                 "cta_label": "Confirm payroll details",
                 "cta_href_display": "https://company-hrportal.io/payroll/verify?token=…",
+                "training_links": _training_links_mail_bank(locale),
                 "choices": _choices_mail(locale),
             }
         return {
@@ -954,6 +1170,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
             ],
             "cta_label": "Подтвердить реквизиты",
             "cta_href_display": "https://company-hrportal.io/payroll/verify?token=…",
+            "training_links": _training_links_mail_bank(locale),
             "choices": _choices_mail(locale),
         }
 
@@ -975,6 +1192,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                         "time": "14:02",
                     }
                 ],
+                "training_links": _training_links_chat_it(locale),
                 "choices": _choices_chat_gifts(locale),
             }
         return {
@@ -993,6 +1211,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                     "time": "14:02",
                 }
             ],
+            "training_links": _training_links_chat_it(locale),
             "choices": _choices_chat_gifts(locale),
         }
 
@@ -1015,6 +1234,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                         "time": "09:41",
                     }
                 ],
+                "training_links": _training_links_chat_it(locale),
                 "choices": _choices_chat_wire(locale),
             }
         return {
@@ -1034,6 +1254,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                     "time": "09:41",
                 }
             ],
+            "training_links": _training_links_chat_it(locale),
             "choices": _choices_chat_wire(locale),
         }
 
@@ -1056,6 +1277,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                         "time": "16:58",
                     }
                 ],
+                "training_links": _training_links_chat_it(locale),
                 "choices": _choices_chat_it(locale),
             }
         return {
@@ -1075,7 +1297,230 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                     "time": "16:58",
                 }
             ],
+            "training_links": _training_links_chat_it(locale),
             "choices": _choices_chat_it(locale),
+        }
+
+    if sid == "vishing-bank":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "chat",
+                "step": 1,
+                "total_steps": 1,
+                "narrative_arc": "Voice: caller pretends to be bank fraud team",
+                "attack_family": "vishing",
+                "title": "Incoming call — “bank security”",
+                "peer_name": "Caller · Fraud desk",
+                "peer_handle": "unknown_caller",
+                "voice_call": {
+                    "mode": "tts",
+                    "label": "Incoming call",
+                    "pause_between_ms": 600,
+                },
+                "messages": [
+                    {
+                        "from": "peer",
+                        "text": (
+                            "Good afternoon, this is MegaBank fraud monitoring. We just blocked an online charge of "
+                            "one thousand one hundred dollars from your card. Was that you?"
+                        ),
+                        "time": "12:41",
+                    },
+                    {
+                        "from": "peer",
+                        "text": (
+                            "To reverse the hold, I need the three-digit security code on the back of the card and "
+                            "the one-time code from the SMS we are sending now. Please read them clearly."
+                        ),
+                        "time": "12:41",
+                    },
+                    {
+                        "from": "peer",
+                        "text": (
+                            "Do not hang up — you have about two minutes before the transaction is released to the merchant."
+                        ),
+                        "time": "12:42",
+                    },
+                ],
+                "training_links": _training_links_chat_it(locale),
+                "choices": _choices_chat_wire(locale),
+            }
+        return {
+            "id": sid,
+            "type": "chat",
+            "step": 1,
+            "total_steps": 1,
+            "narrative_arc": "Звонок: «служба безопасности банка»",
+            "attack_family": "vishing",
+            "title": "Входящий звонок — «безопасность банка»",
+            "peer_name": "Абонент · антифрод",
+            "peer_handle": "unknown_caller",
+            "voice_call": {
+                "mode": "tts",
+                "label": "Входящий звонок",
+                "pause_between_ms": 600,
+            },
+            "messages": [
+                {
+                    "from": "peer",
+                    "text": (
+                        "Добрый день, антифрод МегаБанка. Мы остановили онлайн-оплату на 89 тысяч рублей с вашей карты. "
+                        "Это были вы?"
+                    ),
+                    "time": "12:41",
+                },
+                {
+                    "from": "peer",
+                    "text": (
+                        "Чтобы снять блокировку, назовите трёхзначный код на обороте карты и одноразовый код из СМС, "
+                        "которое мы сейчас отправим. Произнесите чётко."
+                    ),
+                    "time": "12:41",
+                },
+                {
+                    "from": "peer",
+                    "text": (
+                        "Не кладите трубку — у вас около двух минут, иначе операция уйдёт получателю."
+                    ),
+                    "time": "12:42",
+                },
+            ],
+            "training_links": _training_links_chat_it(locale),
+            "choices": _choices_chat_wire(locale),
+        }
+
+    if sid == "vishing-it":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "chat",
+                "step": 1,
+                "total_steps": 1,
+                "narrative_arc": "Voice: fake IT support during “maintenance”",
+                "attack_family": "vishing",
+                "title": "Incoming call — “IT help desk”",
+                "peer_name": "Caller · IT support",
+                "peer_handle": "it_helpdesk_ext",
+                "voice_call": {"mode": "tts", "label": "Incoming call", "pause_between_ms": 550},
+                "messages": [
+                    {
+                        "from": "peer",
+                        "text": (
+                            "Hi, corporate IT on a recorded line. We're finishing mailbox migration — half of the team "
+                            "already confirmed. I need your login password here to sync your profile before the cutoff."
+                        ),
+                        "time": "09:14",
+                    },
+                    {
+                        "from": "peer",
+                        "text": (
+                            "The ticket portal is down, that's why we're calling. It takes ten seconds — spell the password "
+                            "slowly, numbers included."
+                        ),
+                        "time": "09:15",
+                    },
+                ],
+                "training_links": _training_links_chat_it(locale),
+                "choices": _choices_chat_it(locale),
+            }
+        return {
+            "id": sid,
+            "type": "chat",
+            "step": 1,
+            "total_steps": 1,
+            "narrative_arc": "Звонок: фейковая IT-поддержка",
+            "attack_family": "vishing",
+            "title": "Входящий звонок — «IT-поддержка»",
+            "peer_name": "Абонент · техподдержка",
+            "peer_handle": "it_helpdesk_ext",
+            "voice_call": {"mode": "tts", "label": "Входящий звонок", "pause_between_ms": 550},
+            "messages": [
+                {
+                    "from": "peer",
+                    "text": (
+                        "Здравствуйте, корпоративный IT, разговор записывается. Завершаем миграцию почты — половина "
+                        "отдела уже подтвердила. Нужен ваш пароль от учётной записи, чтобы синхронизировать профиль до отсечки."
+                    ),
+                    "time": "09:14",
+                },
+                {
+                    "from": "peer",
+                    "text": (
+                        "Тикет-система лежит, поэтому звоним. Это займёт секунд десять — продиктуйте пароль по буквам, "
+                        "цифры тоже."
+                    ),
+                    "time": "09:15",
+                },
+            ],
+            "training_links": _training_links_chat_it(locale),
+            "choices": _choices_chat_it(locale),
+        }
+
+    if sid == "vishing-courier":
+        if locale == "en":
+            return {
+                "id": sid,
+                "type": "chat",
+                "step": 1,
+                "total_steps": 1,
+                "narrative_arc": "Voice: fake courier fee / customs",
+                "attack_family": "vishing",
+                "title": "Incoming call — “courier service”",
+                "peer_name": "Caller · Delivery hotline",
+                "peer_handle": "courier_line_884",
+                "voice_call": {"mode": "tts", "label": "Incoming call", "pause_between_ms": 500},
+                "messages": [
+                    {
+                        "from": "peer",
+                        "text": (
+                            "Hello, express delivery. Your package is held at the hub — unpaid customs clearance of "
+                            "four ninety-nine. Pay by card over the phone now or it returns to the sender tomorrow."
+                        ),
+                        "time": "17:03",
+                    },
+                    {
+                        "from": "peer",
+                        "text": (
+                            "I can take card number, expiry and the code from the back — it's only for verification, "
+                            "the charge is tiny."
+                        ),
+                        "time": "17:04",
+                    },
+                ],
+                "training_links": _training_links_chat_it(locale),
+                "choices": _choices_chat_gifts(locale),
+            }
+        return {
+            "id": sid,
+            "type": "chat",
+            "step": 1,
+            "total_steps": 1,
+            "narrative_arc": "Звонок: «курьер» и сбор за доставку",
+            "attack_family": "vishing",
+            "title": "Входящий звонок — «служба доставки»",
+            "peer_name": "Абонент · линия доставки",
+            "peer_handle": "courier_line_884",
+            "voice_call": {"mode": "tts", "label": "Входящий звонок", "pause_between_ms": 500},
+            "messages": [
+                {
+                    "from": "peer",
+                    "text": (
+                        "Здравствуйте, курьерская служба. Ваша посылка на складе — не оплачен таможенный сбор 499 рублей. "
+                        "Оплатите картой по телефону сейчас, иначе завтра отправим обратно отправителю."
+                    ),
+                    "time": "17:03",
+                },
+                {
+                    "from": "peer",
+                    "text": (
+                        "Могу принять номер карты, срок и код с оборота — это только для проверки, списание символическое."
+                    ),
+                    "time": "17:04",
+                },
+            ],
+            "training_links": _training_links_chat_it(locale),
+            "choices": _choices_chat_gifts(locale),
         }
 
     if sid == "wifi-cafe":
@@ -1236,6 +1681,9 @@ def _list_entries(locale: Locale) -> list[dict[str, str]]:
             {"id": AGGREGATE_WIFI_ID, "type": "wifi", "title": "Public Wi‑Fi"},
             {"id": AGGREGATE_SKIMMING_ID, "type": "terminal", "title": "Skimming & payment terminals"},
             {"id": AGGREGATE_ACTION_ID, "type": "action_cards", "title": "Action choice — incidents"},
+            {"id": "vishing-bank", "type": "chat", "title": "Voice — fake bank security (vishing)"},
+            {"id": "vishing-it", "type": "chat", "title": "Voice — fake IT support (vishing)"},
+            {"id": "vishing-courier", "type": "chat", "title": "Voice — fake courier fee (vishing)"},
         ]
     return [
         {"id": AGGREGATE_MAIL_ID, "type": "email", "title": "Дом — личная почта и смартфон"},
@@ -1243,6 +1691,9 @@ def _list_entries(locale: Locale) -> list[dict[str, str]]:
         {"id": AGGREGATE_WIFI_ID, "type": "wifi", "title": "Общественный Wi‑Fi"},
         {"id": AGGREGATE_SKIMMING_ID, "type": "terminal", "title": "Скимминг и платёжные терминалы"},
         {"id": AGGREGATE_ACTION_ID, "type": "action_cards", "title": "Выбор действия — инциденты"},
+        {"id": "vishing-bank", "type": "chat", "title": "Звонок — «безопасность банка» (vishing)"},
+        {"id": "vishing-it", "type": "chat", "title": "Звонок — «IT-поддержка» (vishing)"},
+        {"id": "vishing-courier", "type": "chat", "title": "Звонок — «курьер и сбор» (vishing)"},
     ]
 
 
@@ -1264,10 +1715,11 @@ async def get_scenario(
     request: Request,
     lang: str | None = Query(default=None),
     step: int = Query(1, ge=1, le=NARRATIVE_TOTAL_STEPS, description="Уровень 1..5"),
+    refresh: bool = Query(False, description="Запросить новый вариант от LLM (почта/чат-агрегаты)"),
 ) -> dict:
     locale = _locale_from_request(request, lang)
     auth = request.headers.get("authorization")
-    scenario = await _scenario_for_get(scenario_id, locale, step, auth)
+    scenario = await _scenario_for_get(scenario_id, locale, step, auth, refresh_llm=refresh)
     if not scenario:
         raise HTTPException(status_code=404, detail="scenario_not_found")
     return {"locale": locale, "scenario": scenario}
@@ -1301,19 +1753,25 @@ async def submit_choice(
         outcome = outcomes.get(body.choice_id)
         if not outcome:
             return {"ok": False, "error": "unknown_choice", "locale": locale}
-        return {"ok": True, "locale": locale, "result": outcome.model_dump()}
+        dumped = outcome.model_dump()
+        _emit_sim_soc(sid, st, body.choice_id, dumped)
+        return {"ok": True, "locale": locale, "result": dumped}
 
     if sid == AGGREGATE_SKIMMING_ID:
         raw = outcome_skimming(locale, st, body.choice_id)
         if not raw:
             return {"ok": False, "error": "unknown_choice", "locale": locale}
-        return {"ok": True, "locale": locale, "result": ChoiceOutcome(**raw).model_dump()}
+        dumped = ChoiceOutcome(**raw).model_dump()
+        _emit_sim_soc(sid, st, body.choice_id, dumped)
+        return {"ok": True, "locale": locale, "result": dumped}
 
     if sid == AGGREGATE_ACTION_ID:
         raw = outcome_action(locale, st, body.choice_id)
         if not raw:
             return {"ok": False, "error": "unknown_choice", "locale": locale}
-        return {"ok": True, "locale": locale, "result": ChoiceOutcome(**raw).model_dump()}
+        dumped = ChoiceOutcome(**raw).model_dump()
+        _emit_sim_soc(sid, st, body.choice_id, dumped)
+        return {"ok": True, "locale": locale, "result": dumped}
 
     if sid == AGGREGATE_MAIL_ID or sid in MAIL_SCENARIO_IDS:
         outcomes = _outcomes_mail(locale)
@@ -1328,8 +1786,10 @@ async def submit_choice(
     if not outcome:
         return {"ok": False, "error": "unknown_choice", "locale": locale}
 
+    dumped = outcome.model_dump()
+    _emit_sim_soc(sid, st, body.choice_id, dumped)
     return {
         "ok": True,
         "locale": locale,
-        "result": outcome.model_dump(),
+        "result": dumped,
     }

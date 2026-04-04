@@ -8,6 +8,9 @@ class ScenarioGenerateRequest(BaseModel):
     locale: Literal["ru", "en"] = "ru"
     """Случайное число от клиента — разнообразие формулировок без хранения состояния."""
     diversity_roll: int = Field(default=0, ge=0, le=999_999)
+    """0 — очевидные красные флаги; 3 — тоньше: домены, pretext, срочность (из progress-service)."""
+    difficulty_tier: int = Field(default=0, ge=0, le=3)
+    skill_score: int = Field(default=0, ge=0, le=100)
 
 
 class ScenarioChoice(BaseModel):

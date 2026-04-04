@@ -17,6 +17,7 @@ import {
   SIMULATION_SCENARIO_ORDER as SCENARIO_ORDER,
   isCustomSimulationId,
   isSimulationScenarioId,
+  isVishingSimulationId,
 } from "@/lib/courseScenarios";
 import {
   loadCipherlineGameState,
@@ -349,6 +350,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (scenarioId: string): "locked" | "available" | "completed" => {
       if (!userState) return "locked";
       if (isCustomSimulationId(scenarioId)) {
+        if (userState.scenariosCompleted.includes(scenarioId)) return "completed";
+        return "available";
+      }
+      if (isVishingSimulationId(scenarioId)) {
         if (userState.scenariosCompleted.includes(scenarioId)) return "completed";
         return "available";
       }

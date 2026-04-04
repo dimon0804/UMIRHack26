@@ -16,6 +16,9 @@ class Settings(BaseSettings):
 
     gateway_cors_origins: str = "http://localhost:3000"
 
+    redis_url: str = ""
+    """Redis для Live SOC Wall (pub/sub + счётчики). Пример: redis://redis:6379/0"""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.gateway_cors_origins.split(",") if o.strip()]
