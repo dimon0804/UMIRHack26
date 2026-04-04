@@ -133,7 +133,9 @@ export function SimulationLinkLabPage() {
 
   if (loading && !data) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-[#070a0c] text-stone-500">{t("common.loading")}</div>
+      <div className="flex min-h-[100dvh] items-center justify-center bg-paper text-stone-500 dark:bg-night dark:text-stone-400">
+        {t("common.loading")}
+      </div>
     );
   }
 
@@ -161,19 +163,19 @@ export function SimulationLinkLabPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-gradient-to-b from-[#0b1016] to-[#050608] px-4 py-8 text-stone-100 motion-safe:animate-fade-in">
+    <div className="min-h-[100dvh] bg-paper bg-mesh-light px-4 py-8 text-stone-900 motion-safe:animate-fade-in dark:bg-[#050608] dark:bg-gradient-to-b dark:from-[#0b1016] dark:to-[#050608] dark:text-stone-100">
       <div className="mx-auto max-w-lg">
         <Link
           to={backTo}
           onClick={() => clearLinkLabSession()}
-          className="inline-flex items-center gap-1 font-mono text-[11px] text-sky-400/90 hover:text-sky-300"
+          className="inline-flex items-center gap-1 font-mono text-[11px] text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
         >
           ← {t(isStandalone ? "linkLab.backDashboard" : "linkLab.back")}
         </Link>
 
-        <h1 className="mt-6 font-display text-xl font-semibold text-white md:text-2xl">{t("linkLab.title")}</h1>
-        <p className="mt-2 text-sm leading-relaxed text-stone-400">{t("linkLab.subtitle")}</p>
-        <p className="mt-3 rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2 font-mono text-[10px] leading-snug text-stone-500">
+        <h1 className="mt-6 font-display text-xl font-semibold text-stone-900 md:text-2xl dark:text-white">{t("linkLab.title")}</h1>
+        <p className="mt-2 text-sm leading-relaxed text-stone-600 dark:text-stone-300">{t("linkLab.subtitle")}</p>
+        <p className="mt-3 rounded-lg border border-stone-200/90 bg-white/90 px-3 py-2 font-mono text-[10px] leading-snug text-stone-600 shadow-soft dark:border-emerald-900/40 dark:bg-zinc-900/60 dark:text-stone-300 dark:shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)]">
           {t("linkLab.disclaimer")}
         </p>
 
@@ -183,11 +185,13 @@ export function SimulationLinkLabPage() {
               <button
                 type="button"
                 onClick={() => openLink(link, queueIndex)}
-                className="w-full rounded-2xl border border-white/[0.1] bg-zinc-900/80 px-4 py-3.5 text-left shadow-sm transition hover:border-sky-500/35 hover:bg-zinc-900 active:scale-[0.99]"
+                className="w-full rounded-2xl border border-stone-200/90 bg-white px-4 py-3.5 text-left shadow-soft transition hover:border-emerald-300/70 hover:bg-emerald-50/40 hover:shadow-soft-md active:scale-[0.99] dark:border-emerald-900/45 dark:bg-zinc-900/90 dark:shadow-[0_0_0_1px_rgb(16_185_129_/_0.08)] dark:hover:border-emerald-600/40 dark:hover:bg-zinc-900"
               >
-                <p className="text-sm font-medium text-stone-100">{link.label?.trim() || linkHost(link.href)}</p>
-                <p className="mt-1 font-mono text-[11px] text-cyan-600/90 dark:text-cyan-400/85">{linkHost(link.href)}</p>
-                <p className="mt-2 font-mono text-[10px] text-stone-500">{t("linkLab.openTraining")}</p>
+                <p className="text-sm font-medium text-stone-900 dark:text-stone-100">
+                  {link.label?.trim() || linkHost(link.href)}
+                </p>
+                <p className="mt-1 font-mono text-[11px] text-teal-700 dark:text-cyan-300">{linkHost(link.href)}</p>
+                <p className="mt-2 font-mono text-[10px] text-stone-500 dark:text-stone-400">{t("linkLab.openTraining")}</p>
               </button>
             </li>
           ))}
@@ -196,17 +200,20 @@ export function SimulationLinkLabPage() {
 
       {safeModal ? (
         <div
-          className="fixed inset-0 z-[150] flex items-end justify-center bg-black/70 p-4 sm:items-center motion-safe:animate-fade-in"
+          className="fixed inset-0 z-[150] flex items-end justify-center bg-stone-900/40 p-4 backdrop-blur-[2px] sm:items-center motion-safe:animate-fade-in dark:bg-black/70 dark:backdrop-blur-none"
           role="dialog"
           aria-modal="true"
           aria-labelledby="linklab-safe-title"
         >
-          <div className="w-full max-w-md rounded-2xl border border-emerald-900/50 bg-[#0c1410] p-5 shadow-2xl sm:p-6">
-            <p id="linklab-safe-title" className="font-display text-lg font-semibold text-emerald-100">
+          <div className="w-full max-w-md rounded-2xl border border-emerald-200/80 bg-white p-5 shadow-soft-lg sm:p-6 dark:border-emerald-900/50 dark:bg-[#0c1410] dark:shadow-2xl">
+            <p
+              id="linklab-safe-title"
+              className="font-display text-lg font-semibold text-emerald-900 dark:text-emerald-100"
+            >
               {t("linkLab.safeModalTitle")}
             </p>
-            <p className="mt-3 text-sm leading-relaxed text-emerald-200/85">{t("linkLab.safeModalBody")}</p>
-            <p className="mt-3 break-all rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-[11px] text-stone-400">
+            <p className="mt-3 text-sm leading-relaxed text-stone-700 dark:text-emerald-200/85">{t("linkLab.safeModalBody")}</p>
+            <p className="mt-3 break-all rounded-lg border border-stone-200/90 bg-stone-50 px-3 py-2 font-mono text-[11px] text-stone-600 dark:border-white/10 dark:bg-black/40 dark:text-stone-400">
               {safeModal.href}
             </p>
             <button

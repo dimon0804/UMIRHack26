@@ -95,7 +95,7 @@ export function SimulationBreachPage() {
   const breachFlowKey = `${targetUrl}|${scenarioContext?.subject ?? ""}|${scenarioContext?.ctaLabel ?? ""}|${loc.key}`;
 
   return (
-    <div className="min-h-[100dvh] bg-black">
+    <div className="min-h-[100dvh] bg-paper bg-mesh-light dark:bg-black dark:bg-none">
       {fromChat ? (
         <BreachChatMessengerFlow
           key={breachFlowKey}

@@ -166,7 +166,7 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-50 print:hidden">
       <div className="border-b border-emerald-100/40 bg-paper/80 backdrop-blur-xl dark:border-white/[0.06] dark:bg-night/80">
-        <div className="mx-auto max-w-6xl px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 sm:px-4 sm:pb-2.5 md:px-6 md:pb-3">
+        <div className="mx-auto max-w-screen-2xl px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 sm:px-4 sm:pb-2.5 md:px-6 md:pb-3">
           {/* ——— Mobile: один компактный ряд + выезжающая панель ——— */}
           <div className={`relative lg:hidden ${shellCard} px-2.5 py-2`}>
             <div className="flex items-center gap-2">
@@ -212,7 +212,7 @@ export function AppHeader() {
 
           {/* ——— Desktop lg+: одна сетка без flex-wrap (772–1200 раньше ломался) ——— */}
           <div
-            className={`hidden lg:grid ${shellCard} grid-cols-[minmax(0,auto)_minmax(0,1fr)_minmax(0,auto)] items-center gap-x-2 gap-y-2 px-3 py-2.5 min-[1200px]:gap-x-4 min-[1200px]:px-5 min-[1200px]:py-3.5`}
+            className={`hidden lg:grid ${shellCard} grid-cols-[minmax(0,auto)_minmax(max-content,1fr)_minmax(0,auto)] items-center gap-x-2 gap-y-2 px-3 py-2.5 min-[1200px]:gap-x-4 min-[1200px]:px-5 min-[1200px]:py-3.5`}
           >
             <div className="flex min-w-0 max-w-full items-center gap-2 min-[1200px]:gap-3">
               <Link
@@ -229,7 +229,7 @@ export function AppHeader() {
             </div>
 
             <nav
-              className="-mx-0.5 flex min-w-0 flex-wrap content-center items-center justify-center gap-1 rounded-2xl border border-stone-200/90 bg-stone-100/75 p-1.5 dark:border-white/[0.1] dark:bg-white/[0.04]"
+              className="-mx-0.5 flex w-max max-w-full shrink-0 flex-nowrap items-center justify-center gap-0.5 justify-self-center rounded-2xl border border-stone-200/90 bg-stone-100/75 p-1.5 dark:border-white/[0.1] dark:bg-white/[0.04] min-[1200px]:gap-1"
               aria-label="Main"
             >
               {nav.map((n) => (

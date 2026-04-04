@@ -150,38 +150,48 @@ export function LiveSocPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#070b10] text-emerald-100/95">
-      <header className="sticky top-0 z-20 border-b border-emerald-900/50 bg-[#070b10]/95 px-4 py-3 backdrop-blur-md md:px-6">
+    <div className="min-h-screen bg-paper bg-mesh-light text-ink dark:bg-none dark:bg-[#070b10] dark:text-emerald-100/95">
+      <header className="sticky top-0 z-20 border-b border-stone-200/90 bg-white/90 px-4 py-3 backdrop-blur-md dark:border-emerald-900/50 dark:bg-[#070b10]/95 md:px-6">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-500/90">{t("soc.kicker")}</p>
-            <h1 className="font-display text-lg font-semibold tracking-tight text-white md:text-xl">{t("soc.title")}</h1>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-500/90">{t("soc.kicker")}</p>
+            <h1 className="font-display text-lg font-semibold tracking-tight text-ink md:text-xl dark:text-white">{t("soc.title")}</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
               value={team}
               onChange={(e) => setTeam(e.target.value)}
               placeholder={t("soc.teamPh")}
-              className="w-36 rounded-lg border border-emerald-800/60 bg-black/40 px-3 py-1.5 font-mono text-xs text-emerald-100 placeholder:text-emerald-700 focus:border-emerald-500 focus:outline-none md:w-44"
+              className="w-36 rounded-lg border border-stone-300/90 bg-white px-3 py-1.5 font-mono text-xs text-stone-800 placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 md:w-44 dark:border-emerald-800/60 dark:bg-black/40 dark:text-emerald-100 dark:placeholder:text-emerald-700"
             />
             <button
               type="button"
               onClick={() => connect()}
-              className="rounded-lg border border-emerald-600/50 bg-emerald-950/50 px-3 py-1.5 font-mono text-xs text-emerald-200 hover:bg-emerald-900/40"
+              className="rounded-lg border border-emerald-300/90 bg-emerald-50 px-3 py-1.5 font-mono text-xs text-emerald-900 transition hover:bg-emerald-100 dark:border-emerald-600/50 dark:bg-emerald-950/50 dark:text-emerald-200 dark:hover:bg-emerald-900/40"
             >
               {t("soc.reconnect")}
             </button>
             <span
-              className={`rounded-full px-2 py-0.5 font-mono text-[10px] uppercase ${connected ? "bg-emerald-500/20 text-emerald-300" : "bg-red-500/20 text-red-300"}`}
+              className={`rounded-full px-2 py-0.5 font-mono text-[10px] uppercase ${
+                connected
+                  ? "bg-emerald-500/15 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                  : "bg-red-500/15 text-red-700 dark:bg-red-500/20 dark:text-red-300"
+              }`}
             >
               {connected ? t("soc.wsOn") : t("soc.wsOff")}
             </span>
             {user ? (
-              <Link to="/dashboard" className="rounded-lg border border-stone-600 px-3 py-1.5 font-mono text-xs text-stone-300 hover:border-emerald-600 hover:text-white">
+              <Link
+                to="/dashboard"
+                className="rounded-lg border border-stone-300/90 px-3 py-1.5 font-mono text-xs text-stone-700 transition hover:border-emerald-500 hover:text-emerald-800 dark:border-stone-600 dark:text-stone-300 dark:hover:border-emerald-600 dark:hover:text-white"
+              >
                 {t("soc.toDash")}
               </Link>
             ) : (
-              <Link to="/login" className="rounded-lg border border-stone-600 px-3 py-1.5 font-mono text-xs text-stone-300 hover:border-emerald-600 hover:text-white">
+              <Link
+                to="/login"
+                className="rounded-lg border border-stone-300/90 px-3 py-1.5 font-mono text-xs text-stone-700 transition hover:border-emerald-500 hover:text-emerald-800 dark:border-stone-600 dark:text-stone-300 dark:hover:border-emerald-600 dark:hover:text-white"
+              >
                 {t("soc.login")}
               </Link>
             )}
@@ -191,27 +201,27 @@ export function LiveSocPage() {
 
       <div className="mx-auto grid max-w-[1600px] gap-4 px-4 py-4 md:grid-cols-12 md:gap-5 md:px-6 md:py-6">
         <section className="md:col-span-5">
-          <div className="rounded-2xl border border-emerald-900/60 bg-[#0c1219] p-4 shadow-[0_0_40px_-12px_rgb(16_185_129_/_0.25)]">
-            <h2 className="font-mono text-[11px] font-bold uppercase tracking-widest text-emerald-500/80">{t("soc.feed")}</h2>
+          <div className="rounded-2xl border border-emerald-200/80 bg-white p-4 shadow-soft dark:border-emerald-900/60 dark:bg-[#0c1219] dark:shadow-[0_0_40px_-12px_rgb(16_185_129_/_0.25)]">
+            <h2 className="font-mono text-[11px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-500/80">{t("soc.feed")}</h2>
             <div
               ref={listRef}
               className="mt-3 h-[min(52vh,520px)] space-y-2 overflow-y-auto overscroll-contain pr-1 font-mono text-[11px] leading-relaxed md:text-xs"
             >
               {events.length === 0 ? (
-                <p className="text-emerald-700">{t("soc.empty")}</p>
+                <p className="text-stone-500 dark:text-emerald-700">{t("soc.empty")}</p>
               ) : (
                 events.map((ev, i) => {
                   const sev = eventSeverity(ev);
                   const border =
                     sev === "critical"
-                      ? "border-red-500/40 bg-red-950/20"
+                      ? "border-red-300/90 bg-red-50/90 dark:border-red-500/40 dark:bg-red-950/20"
                       : sev === "warn"
-                        ? "border-amber-500/35 bg-amber-950/15"
-                        : "border-emerald-900/50 bg-black/20";
+                        ? "border-amber-300/90 bg-amber-50/80 dark:border-amber-500/35 dark:bg-amber-950/15"
+                        : "border-emerald-200/80 bg-emerald-50/50 dark:border-emerald-900/50 dark:bg-black/20";
                   return (
                     <div key={`${ev.id || i}-${ev.ts || i}`} className={`rounded-lg border px-2.5 py-2 ${border}`}>
-                      <p className="text-[10px] text-emerald-600">{ev.ts}</p>
-                      <p className="mt-0.5 text-emerald-100/95">{formatLine(ev)}</p>
+                      <p className="text-[10px] text-emerald-700 dark:text-emerald-600">{ev.ts}</p>
+                      <p className="mt-0.5 text-stone-800 dark:text-emerald-100/95">{formatLine(ev)}</p>
                     </div>
                   );
                 })
@@ -221,18 +231,18 @@ export function LiveSocPage() {
         </section>
 
         <section className="md:col-span-4">
-          <div className="rounded-2xl border border-cyan-900/50 bg-[#0c1219] p-4">
-            <h2 className="font-mono text-[11px] font-bold uppercase tracking-widest text-cyan-500/85">{t("soc.map")}</h2>
-            <p className="mt-1 text-[10px] text-cyan-800/90">{t("soc.mapHint")}</p>
-            <div className="relative mt-4 aspect-[16/10] w-full overflow-hidden rounded-xl border border-cyan-900/40 bg-gradient-to-b from-[#0a1628] to-[#050810]">
-              <svg viewBox="0 0 100 60" className="h-full w-full opacity-40" preserveAspectRatio="xMidYMid slice">
+          <div className="rounded-2xl border border-cyan-200/80 bg-white p-4 shadow-soft dark:border-cyan-900/50 dark:bg-[#0c1219] dark:shadow-none">
+            <h2 className="font-mono text-[11px] font-bold uppercase tracking-widest text-cyan-700 dark:text-cyan-500/85">{t("soc.map")}</h2>
+            <p className="mt-1 text-[10px] text-cyan-800/80 dark:text-cyan-800/90">{t("soc.mapHint")}</p>
+            <div className="relative mt-4 aspect-[16/10] w-full overflow-hidden rounded-xl border border-cyan-200/90 bg-gradient-to-b from-sky-50 via-white to-emerald-50/40 dark:border-cyan-900/40 dark:from-[#0a1628] dark:to-[#050810]">
+              <svg viewBox="0 0 100 60" className="h-full w-full opacity-50 dark:opacity-40" preserveAspectRatio="xMidYMid slice">
                 <defs>
                   <pattern id="socgrid" width="4" height="4" patternUnits="userSpaceOnUse">
-                    <path d="M 4 0 L 0 0 0 4" fill="none" stroke="rgb(6 78 59 / 0.35)" strokeWidth="0.15" />
+                    <path d="M 4 0 L 0 0 0 4" fill="none" stroke="rgb(16 185 129 / 0.22)" strokeWidth="0.15" />
                   </pattern>
                 </defs>
                 <rect width="100" height="60" fill="url(#socgrid)" />
-                <ellipse cx="50" cy="32" rx="38" ry="22" fill="none" stroke="rgb(34 197 94 / 0.12)" strokeWidth="0.4" />
+                <ellipse cx="50" cy="32" rx="38" ry="22" fill="none" stroke="rgb(34 197 94 / 0.18)" strokeWidth="0.4" />
               </svg>
               {blips.map((b) => {
                 const pos = REGION_POS[b.region] || REGION_POS.EU;
@@ -250,45 +260,47 @@ export function LiveSocPage() {
                   />
                 );
               })}
-              <p className="absolute bottom-2 left-2 max-w-[90%] font-mono text-[9px] leading-snug text-cyan-700/90">{t("soc.mapLegend")}</p>
+              <p className="absolute bottom-2 left-2 max-w-[90%] font-mono text-[9px] leading-snug text-cyan-800/90 dark:text-cyan-700/90">{t("soc.mapLegend")}</p>
             </div>
           </div>
         </section>
 
         <section className="md:col-span-3">
           <div className="space-y-4">
-            <div className="rounded-2xl border border-emerald-900/60 bg-[#0c1219] p-4">
-              <h2 className="font-mono text-[11px] font-bold uppercase tracking-widest text-emerald-500/80">{t("soc.ops")}</h2>
+            <div className="rounded-2xl border border-emerald-200/80 bg-white p-4 shadow-soft dark:border-emerald-900/60 dark:bg-[#0c1219] dark:shadow-none">
+              <h2 className="font-mono text-[11px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-500/80">{t("soc.ops")}</h2>
               <dl className="mt-3 space-y-2 font-mono text-xs">
-                <div className="flex justify-between border-b border-emerald-950/80 pb-2">
-                  <dt className="text-emerald-600">{t("soc.viewers")}</dt>
-                  <dd className="text-white">{viewers}</dd>
+                <div className="flex justify-between border-b border-emerald-200/80 pb-2 dark:border-emerald-950/80">
+                  <dt className="text-emerald-700 dark:text-emerald-600">{t("soc.viewers")}</dt>
+                  <dd className="font-semibold text-stone-900 dark:text-white">{viewers}</dd>
                 </div>
-                <div className="flex justify-between border-b border-emerald-950/80 pb-2">
-                  <dt className="text-emerald-600">{t("soc.totalEv")}</dt>
-                  <dd className="text-white">{stats.total ?? "0"}</dd>
+                <div className="flex justify-between border-b border-emerald-200/80 pb-2 dark:border-emerald-950/80">
+                  <dt className="text-emerald-700 dark:text-emerald-600">{t("soc.totalEv")}</dt>
+                  <dd className="font-semibold text-stone-900 dark:text-white">{stats.total ?? "0"}</dd>
                 </div>
               </dl>
             </div>
-            <div className="rounded-2xl border border-violet-900/50 bg-[#0c1219] p-4">
-              <h2 className="font-mono text-[11px] font-bold uppercase tracking-widest text-violet-400/90">{t("soc.teams")}</h2>
+            <div className="rounded-2xl border border-violet-200/90 bg-white p-4 shadow-soft dark:border-violet-900/50 dark:bg-[#0c1219] dark:shadow-none">
+              <h2 className="font-mono text-[11px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400/90">{t("soc.teams")}</h2>
               <ul className="mt-2 max-h-40 space-y-1.5 overflow-y-auto font-mono text-[11px]">
-                {Object.keys(teams).length === 0 ? <li className="text-violet-700">{t("soc.noTeams")}</li> : null}
+                {Object.keys(teams).length === 0 ? (
+                  <li className="text-violet-600/80 dark:text-violet-700">{t("soc.noTeams")}</li>
+                ) : null}
                 {Object.entries(teams).map(([name, n]) => (
-                  <li key={name} className="flex justify-between text-violet-100/90">
+                  <li key={name} className="flex justify-between text-stone-800 dark:text-violet-100/90">
                     <span className="truncate pr-2">{name}</span>
-                    <span className="text-violet-400">{n}</span>
+                    <span className="font-medium text-violet-600 dark:text-violet-400">{n}</span>
                   </li>
                 ))}
               </ul>
             </div>
-            <div className="rounded-2xl border border-stone-800 bg-[#0c1219] p-4">
-              <h2 className="font-mono text-[11px] font-bold uppercase tracking-widest text-stone-500">{t("soc.counts")}</h2>
-              <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto font-mono text-[10px] text-stone-400">
+            <div className="rounded-2xl border border-stone-200/90 bg-white p-4 shadow-soft dark:border-stone-800 dark:bg-[#0c1219] dark:shadow-none">
+              <h2 className="font-mono text-[11px] font-bold uppercase tracking-widest text-stone-600 dark:text-stone-500">{t("soc.counts")}</h2>
+              <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto font-mono text-[10px] text-stone-600 dark:text-stone-400">
                 {statRows.map((k) => (
                   <li key={k} className="flex justify-between gap-2">
                     <span className="truncate">{k}</span>
-                    <span>{stats[k]}</span>
+                    <span className="font-medium text-stone-800 dark:text-stone-300">{stats[k]}</span>
                   </li>
                 ))}
               </ul>
@@ -296,7 +308,7 @@ export function LiveSocPage() {
           </div>
         </section>
       </div>
-      <p className="mx-auto max-w-[1600px] px-6 pb-8 font-mono text-[10px] text-emerald-800">{t("soc.footer")}</p>
+      <p className="mx-auto max-w-[1600px] px-6 pb-8 font-mono text-[10px] text-stone-500 dark:text-emerald-800">{t("soc.footer")}</p>
     </div>
   );
 }
