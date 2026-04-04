@@ -34,10 +34,16 @@ export function completedScenarioTitleKeys(state: UserState): string[] {
 
 export function certificateReconcilePatch(state: UserState): Partial<UserState> | null {
   if (!certificateEligible(state)) return null;
-  if (state.certificateUnlocked && state.certificateId) return null;
+  if (state.certificateUnlocked && state.certificateId && state.certificateIssuedAt) return null;
+  if (state.certificateUnlocked && state.certificateId && !state.certificateIssuedAt) {
+    return { certificateIssuedAt: new Date().toISOString() };
+  }
+  const newId = state.certificateId || generateCertificateId();
+  const issued = state.certificateIssuedAt || new Date().toISOString();
   return {
     certificateUnlocked: true,
-    certificateId: state.certificateId || generateCertificateId(),
+    certificateId: newId,
+    certificateIssuedAt: issued,
   };
 }
 

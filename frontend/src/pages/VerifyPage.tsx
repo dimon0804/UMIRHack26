@@ -1,22 +1,68 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { useApp } from "@/context/AppContext";
 import { certificateIdLooksValid, certificateVerifyUrl } from "@/lib/certificate";
+import { fetchCertificateVerify, type CertificateVerifyResponse } from "@/lib/certificateVerify";
 import { useI18n } from "@/i18n/I18nContext";
 
 export function VerifyPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useApp();
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [copied, setCopied] = useState(false);
+  const [registry, setRegistry] = useState<CertificateVerifyResponse | null | undefined>(undefined);
 
   const trimmed = id?.trim() ?? "";
-  const valid = certificateIdLooksValid(trimmed);
+  const formatOk = certificateIdLooksValid(trimmed);
   const verifyUrl = useMemo(
     () => (typeof window !== "undefined" && trimmed ? certificateVerifyUrl(trimmed) : ""),
     [trimmed],
   );
+
+  useEffect(() => {
+    if (!formatOk || !trimmed) {
+      setRegistry(undefined);
+      return;
+    }
+    let cancelled = false;
+    setRegistry(undefined);
+    void (async () => {
+      const res = await fetchCertificateVerify(trimmed, locale);
+      if (!cancelled) setRegistry(res);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [formatOk, trimmed, locale]);
+
+  const registryOk = registry?.valid === true;
+  const registryPending = formatOk && registry === undefined;
+  const registryUnreachable = formatOk && registry === null;
+  const registryNotFound =
+    registry != null && registry.valid === false && registry.error === "not_found";
+
+  const showShieldIcon = formatOk && (registryPending || registryOk);
+  const cardClass = registryOk
+    ? "rounded-[1.75rem] border border-emerald-200/90 bg-gradient-to-b from-white/95 via-emerald-50/40 to-white/90 p-1 shadow-glow-sm dark:border-emerald-800/40 dark:from-zinc-900/95 dark:via-emerald-950/25 dark:to-zinc-950/90 dark:shadow-[0_0_48px_-12px_rgb(34_197_94_/_0.25)]"
+    : formatOk && registryPending
+      ? "rounded-[1.75rem] border border-teal-200/80 bg-gradient-to-b from-white/95 via-teal-50/30 to-white/90 p-1 dark:border-teal-900/35 dark:from-zinc-900/95 dark:via-teal-950/20 dark:to-zinc-950/90"
+      : "rounded-[1.75rem] border border-stone-200/90 bg-gradient-to-b from-white/95 to-stone-50/50 p-1 dark:border-stone-700/60 dark:from-zinc-900/95 dark:to-zinc-950/80";
+
+  function formatIssued(iso: string | null): string {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleDateString(locale === "en" ? "en-US" : "ru-RU", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+    } catch {
+      return iso;
+    }
+  }
 
   async function copyUrl() {
     if (!verifyUrl || !navigator.clipboard) return;
@@ -29,6 +75,38 @@ export function VerifyPage() {
     }
   }
 
+  const badgeLabel = !formatOk
+    ? t("verify.bad")
+    : registryPending
+      ? t("verify.checkingRegistry")
+      : registryOk
+        ? t("verify.ok")
+        : t("verify.bad");
+
+  const titleText = !formatOk
+    ? t("verify.notFoundTitle")
+    : registryPending
+      ? t("verify.foundTitle")
+      : registryOk
+        ? t("verify.registryOkTitle")
+        : registryUnreachable
+          ? t("verify.registryError")
+          : registryNotFound
+            ? t("verify.registryMissTitle")
+            : t("verify.notFoundTitle");
+
+  const bodyText = !formatOk
+    ? t("verify.notFoundBody")
+    : registryPending
+      ? t("verify.foundBody")
+      : registryOk
+        ? ""
+        : registryUnreachable
+          ? t("verify.registryError")
+          : registryNotFound
+            ? t("verify.registryMissBody")
+            : t("verify.notFoundBody");
+
   return (
     <div className="relative flex min-h-[min(100dvh,100vh)] flex-col items-center justify-center px-4 py-16">
       <div className="pointer-events-none absolute inset-0 bg-mesh-cyber opacity-60 dark:opacity-80" aria-hidden />
@@ -37,19 +115,13 @@ export function VerifyPage() {
         aria-hidden
       />
 
-      <div
-        className={`relative z-10 w-full max-w-lg motion-safe:animate-pop-in ${
-          valid
-            ? "rounded-[1.75rem] border border-emerald-200/90 bg-gradient-to-b from-white/95 via-emerald-50/40 to-white/90 p-1 shadow-glow-sm dark:border-emerald-800/40 dark:from-zinc-900/95 dark:via-emerald-950/25 dark:to-zinc-950/90 dark:shadow-[0_0_48px_-12px_rgb(34_197_94_/_0.25)]"
-            : "rounded-[1.75rem] border border-stone-200/90 bg-gradient-to-b from-white/95 to-stone-50/50 p-1 dark:border-stone-700/60 dark:from-zinc-900/95 dark:to-zinc-950/80"
-        }`}
-      >
+      <div className={`relative z-10 w-full max-w-lg motion-safe:animate-pop-in ${cardClass}`}>
         <div className="relative overflow-hidden rounded-[1.6rem] bg-paper/90 px-8 pb-10 pt-10 dark:bg-night/50">
           <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl dark:bg-emerald-500/10" />
 
           <div className="flex flex-col items-center text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-200/80 bg-emerald-500/10 shadow-inner dark:border-emerald-800/50 dark:bg-emerald-950/40">
-              {valid ? (
+              {showShieldIcon ? (
                 <svg className="size-8 text-emerald-700 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" aria-hidden>
                   <path
                     d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z"
@@ -82,31 +154,59 @@ export function VerifyPage() {
 
             <span
               className={`mt-3 inline-flex rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                valid
+                registryOk
                   ? "bg-emerald-500/15 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200"
                   : "bg-amber-500/15 text-amber-950 dark:bg-amber-500/15 dark:text-amber-100"
               }`}
             >
-              {valid ? t("verify.ok") : t("verify.bad")}
+              {badgeLabel}
             </span>
 
-            <h1 className="mt-4 font-display text-xl font-semibold text-ink dark:text-stone-100 md:text-2xl">
-              {valid ? t("verify.foundTitle") : t("verify.notFoundTitle")}
-            </h1>
-            <p className="mt-4 text-sm leading-relaxed text-stone-600 dark:text-stone-400">
-              {valid ? t("verify.foundBody") : t("verify.notFoundBody")}
-            </p>
+            <h1 className="mt-4 font-display text-xl font-semibold text-ink dark:text-stone-100 md:text-2xl">{titleText}</h1>
+            {bodyText ? (
+              <p className="mt-4 text-sm leading-relaxed text-stone-600 dark:text-stone-400">{bodyText}</p>
+            ) : null}
+
+            {registryPending ? <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">{t("verify.checkingRegistry")}</p> : null}
           </div>
 
-          {valid && trimmed ? (
-            <div className="mt-8 space-y-5 border-t border-stone-200/80 pt-8 dark:border-stone-700/60">
+          {registryOk && trimmed ? (
+            <div className="mt-8 space-y-4 border-t border-stone-200/80 pt-8 text-left dark:border-stone-700/60">
+              <div className="rounded-xl border border-stone-200/80 bg-white/50 p-4 dark:border-stone-700/60 dark:bg-zinc-900/40">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">{t("verify.labelCourse")}</p>
+                <p className="mt-1 text-sm font-semibold text-stone-900 dark:text-stone-100">{registry.course_title}</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-stone-200/80 bg-white/50 p-4 dark:border-stone-700/60 dark:bg-zinc-900/40">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">{t("verify.labelHolder")}</p>
+                  <p className="mt-1 break-all font-mono text-sm text-stone-900 dark:text-stone-100">{registry.holder_login}</p>
+                </div>
+                <div className="rounded-xl border border-stone-200/80 bg-white/50 p-4 dark:border-stone-700/60 dark:bg-zinc-900/40">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">{t("verify.labelIssued")}</p>
+                  <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">{formatIssued(registry.issued_at)}</p>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-stone-200/80 bg-white/50 p-4 dark:border-stone-700/60 dark:bg-zinc-900/40">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">{t("verify.labelAccuracy")}</p>
+                  <p className="mt-1 text-sm font-semibold text-stone-900 dark:text-stone-100">
+                    {registry.accuracy_percent != null ? `${registry.accuracy_percent}%` : "—"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-stone-200/80 bg-white/50 p-4 dark:border-stone-700/60 dark:bg-zinc-900/40">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">{t("verify.labelXp")}</p>
+                  <p className="mt-1 text-sm font-semibold text-stone-900 dark:text-stone-100">{registry.xp}</p>
+                </div>
+              </div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500 dark:text-stone-400">
-                  {t("verify.idLabel")}
-                </p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500 dark:text-stone-400">{t("verify.idLabel")}</p>
                 <p className="mt-2 break-all font-mono text-sm font-semibold text-stone-900 dark:text-stone-100">{trimmed}</p>
               </div>
+            </div>
+          ) : null}
 
+          {formatOk && trimmed ? (
+            <div className="mt-8 space-y-5 border-t border-stone-200/80 pt-8 dark:border-stone-700/60">
               <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1 text-left">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-stone-500">{t("cert.verifyQr")}</p>

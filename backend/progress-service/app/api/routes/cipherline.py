@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser
@@ -13,6 +15,79 @@ from app.models.game_state import CipherlineGameState
 from app.services.skill_profile import compute_skill_profile
 
 router = APIRouter(prefix="/cipherline", tags=["cipherline"])
+
+_CERT_ID_RE = re.compile(r"^[a-f0-9]{16}$", re.IGNORECASE)
+
+_COURSE_TITLE = {
+    "ru": "Cipherline — программа по цифровой кибергигиене",
+    "en": "Cipherline — cyber hygiene program",
+}
+
+
+@router.get("/certificate/verify/{certificate_id}")
+async def verify_certificate_public(
+    certificate_id: str,
+    session: AsyncSession = Depends(get_session),
+    lang: str = Query("ru", description="ru или en — заголовок курса"),
+) -> dict[str, Any]:
+    """
+    Публичная проверка сертификата по ID с бланка / QR (без JWT).
+    """
+    cid = certificate_id.strip()
+    if not _CERT_ID_RE.match(cid):
+        return {"valid": False, "error": "invalid_id"}
+
+    lng = lang if lang in _COURSE_TITLE else "ru"
+
+    result = await session.execute(
+        text(
+            """
+            SELECT email, state, updated_at
+            FROM cipherline_game_state
+            WHERE lower(state->>'certificateId') = lower(:cid)
+              AND (state->>'certificateUnlocked') = 'true'
+            LIMIT 1
+            """
+        ),
+        {"cid": cid},
+    )
+    row = result.mappings().first()
+    if not row:
+        return {"valid": False, "error": "not_found"}
+
+    state = row["state"]
+    if not isinstance(state, dict):
+        return {"valid": False, "error": "not_found"}
+
+    stored_id = (state.get("certificateId") or "").strip()
+    if stored_id.lower() != cid.lower():
+        return {"valid": False, "error": "not_found"}
+
+    login = (state.get("login") or row.get("email") or "").strip()
+    issued_raw = state.get("certificateIssuedAt")
+    if isinstance(issued_raw, str) and issued_raw.strip():
+        issued_at = issued_raw.strip()
+    else:
+        ua = row.get("updated_at")
+        issued_at = ua.isoformat() if ua is not None else None
+
+    total_answers = int(state.get("totalAnswers") or 0)
+    total_correct = int(state.get("totalCorrect") or 0)
+    accuracy_percent: int | None
+    if total_answers > 0:
+        accuracy_percent = round((total_correct / total_answers) * 100)
+    else:
+        accuracy_percent = None
+
+    return {
+        "valid": True,
+        "certificate_id": stored_id,
+        "holder_login": login,
+        "issued_at": issued_at,
+        "course_title": _COURSE_TITLE[lng],
+        "accuracy_percent": accuracy_percent,
+        "xp": int(state.get("xp") or 0),
+    }
 
 
 @router.get("/state")

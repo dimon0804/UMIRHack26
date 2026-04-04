@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     ai_service_url: str = ""
     """Базовый URL ai-service (в Docker: http://ai-service:8000)."""
 
+    jury_llm_deadline_sec: float = 3.0
+    """Макс. время ожидания ответа jury-take (submit не должен висеть дольше)."""
+
     simulation_llm_scenarios: bool = True
     """Если true и задан ai_service_url — сценарии для вкладок почта/чат генерирует Mistral."""
 

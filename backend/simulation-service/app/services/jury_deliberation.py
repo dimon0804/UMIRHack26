@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Literal
 
@@ -200,10 +201,11 @@ async def fetch_llm_jury_line(
     choice_summary: str,
     is_safe: bool,
     teach_title: str,
-) -> str | None:
+) -> tuple[str | None, str | None]:
+    """(commentary, error_code). error_code: unreachable | http_error | bad_response | None."""
     base = settings.ai_service_url.strip().rstrip("/")
     if not base:
-        return None
+        return None, None
     url = f"{base}/jury-take"
     payload: dict[str, Any] = {
         "locale": locale,
@@ -214,22 +216,25 @@ async def fetch_llm_jury_line(
         "is_safe": is_safe,
         "teach_title": teach_title[:200],
     }
-    timeout = httpx.Timeout(connect=5.0, read=45.0, write=5.0, pool=5.0)
+    read_sec = max(1.0, float(settings.jury_llm_deadline_sec) - 0.5)
+    timeout = httpx.Timeout(connect=2.0, read=read_sec, write=5.0, pool=5.0)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.post(url, json=payload)
     except httpx.RequestError as exc:
         log.debug("jury-take unreachable: %s", exc)
-        return None
+        return None, "unreachable"
     if r.status_code >= 400:
         log.debug("jury-take HTTP %s", r.status_code)
-        return None
+        return None, "http_error"
     try:
         data = r.json()
     except ValueError:
-        return None
+        return None, "bad_response"
     c = data.get("commentary")
-    return c.strip() if isinstance(c, str) and c.strip() else None
+    if isinstance(c, str) and c.strip():
+        return c.strip(), None
+    return None, "bad_response"
 
 
 async def build_jury_deliberation(
@@ -244,20 +249,39 @@ async def build_jury_deliberation(
     choice_summary = _choice_summary(locale, choice_id)
     for_pts, against_pts = _rule_points(locale, scenario_type, choice_id, is_safe)
     v_title, v_body = _verdict_copy(locale, is_safe)
-    llm = await fetch_llm_jury_line(
-        locale=locale,
-        scenario_type=scenario_type,
-        scenario_title=scenario_title,
-        choice_id=choice_id,
-        choice_summary=choice_summary,
-        is_safe=is_safe,
-        teach_title=teach_title,
-    )
+    llm_error: str | None
+    if not settings.ai_service_url.strip():
+        llm_comment, llm_error = None, "disabled"
+    else:
+        deadline = max(1.5, float(settings.jury_llm_deadline_sec))
+
+        async def _llm() -> tuple[str | None, str | None]:
+            return await fetch_llm_jury_line(
+                locale=locale,
+                scenario_type=scenario_type,
+                scenario_title=scenario_title,
+                choice_id=choice_id,
+                choice_summary=choice_summary,
+                is_safe=is_safe,
+                teach_title=teach_title,
+            )
+
+        try:
+            llm_comment, err = await asyncio.wait_for(_llm(), timeout=deadline)
+            llm_error = None if llm_comment else (err or "bad_response")
+        except asyncio.TimeoutError:
+            llm_comment, llm_error = None, "timeout"
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.debug("jury-take failed: %s", exc)
+            llm_comment, llm_error = None, "unreachable"
     bonus_xp = 5
     return {
         "for_points": for_pts,
         "against_points": against_pts,
-        "llm_comment": llm,
+        "llm_comment": llm_comment,
+        "llm_error": llm_error,
         "verdict_title": v_title,
         "verdict_body": v_body,
         "verdict_aligns_safe": is_safe,

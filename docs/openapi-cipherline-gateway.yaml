@@ -232,6 +232,22 @@ paths:
         "403":
           description: login не совпадает с email в JWT
 
+  /api/v1/progress/cipherline/certificate/verify/{certificate_id}:
+    get:
+      tags: [progress]
+      summary: Публичная проверка сертификата по ID (без JWT)
+      parameters:
+        - name: certificate_id
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-fA-F0-9]{16}$" }
+        - name: lang
+          in: query
+          schema: { type: string, enum: [ru, en], default: ru }
+      responses:
+        "200":
+          description: valid true/false; при valid — holder_login, issued_at, course_title, accuracy_percent, xp
+
   /api/v1/progress/custom-scenarios:
     get:
       tags: [progress]

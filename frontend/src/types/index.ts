@@ -62,6 +62,8 @@ export interface UserState {
   history: HistoryEntry[];
   mistakeByType: Record<string, number>;
   certificateId?: string;
+  /** ISO-8601, выставляется при первой выдаче сертификата (для реестра /verify). */
+  certificateIssuedAt?: string;
   certificateUnlocked: boolean;
 }
 

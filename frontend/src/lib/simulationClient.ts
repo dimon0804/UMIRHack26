@@ -109,10 +109,19 @@ export type ApiScenarioUnion =
   | ApiActionCardsScenario;
 
 /** Ответ simulation-service «Суд присяжных» после submit. */
+export type JuryLlmErrorCode =
+  | "disabled"
+  | "timeout"
+  | "unreachable"
+  | "http_error"
+  | "bad_response";
+
 export type JuryDeliberationPayload = {
   for_points: string[];
   against_points: string[];
   llm_comment: string | null;
+  /** Если комментария нет — код причины (показать пользователю). */
+  llm_error?: JuryLlmErrorCode | null;
   verdict_title: string;
   verdict_body: string;
   verdict_aligns_safe: boolean;

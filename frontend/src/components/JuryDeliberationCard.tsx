@@ -1,11 +1,18 @@
 import { useI18n } from "@/i18n/I18nContext";
-import type { JuryDeliberationPayload } from "@/lib/simulationClient";
+import type { JuryDeliberationPayload, JuryLlmErrorCode } from "@/lib/simulationClient";
 
 type Props = { jury: JuryDeliberationPayload };
+
+function juryLlmFallbackMessage(t: (k: string) => string, code: JuryLlmErrorCode | null | undefined): string {
+  if (code === "timeout") return t("sim.juryLlmTimeout");
+  if (code === "disabled") return t("sim.juryLlmDisabled");
+  return t("sim.juryLlmUnavailable");
+}
 
 export function JuryDeliberationCard({ jury }: Props) {
   const { t } = useI18n();
   const safeLean = jury.verdict_aligns_safe;
+  const showLlmFallback = !jury.llm_comment && jury.llm_error;
 
   return (
     <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-b from-violet-50/90 to-white/80 p-5 dark:border-violet-900/45 dark:from-violet-950/35 dark:to-stone-900/50">
@@ -43,6 +50,15 @@ export function JuryDeliberationCard({ jury }: Props) {
             {t("sim.juryLlmNote")}
           </p>
           <p className="mt-1.5 text-xs leading-relaxed text-stone-700 dark:text-stone-300">{jury.llm_comment}</p>
+        </div>
+      ) : showLlmFallback ? (
+        <div className="mt-4 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/25">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200/90">
+            {t("sim.juryLlmNote")}
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-amber-950/90 dark:text-amber-100/90">
+            {juryLlmFallbackMessage(t, jury.llm_error)}
+          </p>
         </div>
       ) : null}
 

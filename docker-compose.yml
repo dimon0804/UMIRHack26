@@ -79,6 +79,7 @@ services:
       AI_SERVICE_URL: http://ai-service:8000
       PROGRESS_SERVICE_URL: http://progress-service:8000
       SIMULATION_LLM_SCENARIOS: ${SIMULATION_LLM_SCENARIOS:-true}
+      JURY_LLM_DEADLINE_SEC: ${JURY_LLM_DEADLINE_SEC:-3.0}
     depends_on:
       ai-service:
         condition: service_healthy
