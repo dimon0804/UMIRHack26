@@ -1,0 +1,5 @@
+# pip install -r scripts/requirements-vishing-tts.txt
+# Сеть для Edge TTS; ffmpeg подтягивается через imageio-ffmpeg (бинарник в пакете).
+edge-tts>=6.1.0
+mutagen>=1.47.0
+imageio-ffmpeg>=0.5.1

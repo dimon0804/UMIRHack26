@@ -366,7 +366,7 @@ export function VishingVoiceCall({
         {(driver === "audio" || driver === "tts") && (phase === "playing" || phase === "paused") ? (
           <button
             type="button"
-            disabled={disabled || phase === "ringing"}
+            disabled={disabled}
             onClick={() => togglePause()}
             className="rounded-xl border border-violet-400/60 bg-white/80 px-4 py-2 text-xs font-semibold text-violet-900 dark:border-violet-700 dark:bg-zinc-900/60 dark:text-violet-100"
           >

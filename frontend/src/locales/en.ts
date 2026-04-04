@@ -125,7 +125,7 @@ export const en: Record<string, string> = {
   "sim.vishingTtsHint":
     "Voice uses your browser’s speech synthesis. You can replace files under public/vishing.",
   "sim.vishingHybridHint":
-    "A short training track plays first (synced to chat lines). If the file fails to load, the browser will use speech synthesis.",
+    "A recorded track plays first (Edge neural TTS as MP3; lines highlight on a cue timeline). If the file fails to load, the browser uses speech synthesis.",
   "sim.vishingAudioHint": "Recorded track only; bubbles highlight from the cue timeline.",
   "sim.vishingPlayingTrack": "Track",
   "sim.vishingFallbackBadge": "Speech synthesis",

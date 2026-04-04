@@ -113,10 +113,10 @@ def _vishing_voice_hybrid(
     pause_between_ms: int,
     locale: Locale,
 ) -> dict[str, object]:
-    """Короткая WAV-дорожка в public/vishing + синхронные метки; при сбое загрузки UI уходит в TTS."""
+    """MP3 из scripts/generate_vishing_tts.py (Edge TTS) в public/vishing; метки из cues.generated.json."""
     return {
         "mode": "hybrid",
-        "audio_src": f"/vishing/{track_base}.wav",
+        "audio_src": f"/vishing/{track_base}-{locale}.mp3",
         "cues_sec": cues_sec,
         "pause_between_ms": pause_between_ms,
         "label": "Incoming call" if locale == "en" else "Входящий звонок",
@@ -1333,7 +1333,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                 "peer_handle": "unknown_caller",
                 "voice_call": _vishing_voice_hybrid(
                     track_base="vishing-bank",
-                    cues_sec=[0.0, 4.55, 8.9],
+                    cues_sec=[0.0, 10.962, 21.228],
                     pause_between_ms=600,
                     locale=locale,
                 ),
@@ -1377,7 +1377,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
             "peer_handle": "unknown_caller",
             "voice_call": _vishing_voice_hybrid(
                 track_base="vishing-bank",
-                cues_sec=[0.0, 4.55, 8.9],
+                cues_sec=[0.0, 11.034, 21.804],
                 pause_between_ms=600,
                 locale=locale,
             ),
@@ -1424,7 +1424,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                 "peer_handle": "it_helpdesk_ext",
                 "voice_call": _vishing_voice_hybrid(
                     track_base="vishing-it",
-                    cues_sec=[0.0, 5.35],
+                    cues_sec=[0.0, 12.666],
                     pause_between_ms=550,
                     locale=locale,
                 ),
@@ -1461,7 +1461,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
             "peer_handle": "it_helpdesk_ext",
             "voice_call": _vishing_voice_hybrid(
                 track_base="vishing-it",
-                cues_sec=[0.0, 5.35],
+                cues_sec=[0.0, 15.522],
                 pause_between_ms=550,
                 locale=locale,
             ),
@@ -1501,7 +1501,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
                 "peer_handle": "courier_line_884",
                 "voice_call": _vishing_voice_hybrid(
                     track_base="vishing-courier",
-                    cues_sec=[0.0, 5.15],
+                    cues_sec=[0.0, 12.594],
                     pause_between_ms=500,
                     locale=locale,
                 ),
@@ -1538,7 +1538,7 @@ def _scenario_by_id(scenario_id: str, locale: Locale) -> dict | None:
             "peer_handle": "courier_line_884",
             "voice_call": _vishing_voice_hybrid(
                 track_base="vishing-courier",
-                cues_sec=[0.0, 5.15],
+                cues_sec=[0.0, 15.09],
                 pause_between_ms=500,
                 locale=locale,
             ),
