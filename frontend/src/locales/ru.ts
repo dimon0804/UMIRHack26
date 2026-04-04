@@ -108,6 +108,8 @@ export const ru: Record<string, string> = {
   "sim.juryLlmDisabled": "ИИ-комментарий отключён (сервис не настроен). Ниже только правила тренажёра.",
   "sim.juryLlmTimeout": "ИИ не успел ответить вовремя — показан только rule-based разбор.",
   "sim.juryLlmUnavailable": "ИИ сейчас недоступен (сеть или ответ сервера). Ниже только правила тренажёра.",
+  "sim.pedagogyTitle": "Справочные теги (CWE / OWASP / APWG)",
+  "sim.pedagogyFootnote": "Краткая привязка к методологии; подробности — docs/SECURITY_SOURCES.md.",
   "sim.consequences": "Возможные последствия",
   "sim.continueDash": "На дашборд",
   "sim.nextRound": "Ещё раунд",

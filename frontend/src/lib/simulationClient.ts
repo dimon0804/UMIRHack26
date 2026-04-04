@@ -143,6 +143,8 @@ export type SubmitResult = {
     show_consequences: boolean;
     consequence_steps: { title: string; detail: string }[];
     hint?: string | null;
+    cwe_ids?: string[];
+    owasp_refs?: string[];
   };
   jury?: JuryDeliberationPayload | null;
 };

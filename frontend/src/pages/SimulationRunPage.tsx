@@ -750,6 +750,26 @@ export function SimulationRunPage() {
                   <p className="mt-2 text-sm leading-relaxed text-stone-700 dark:text-stone-300">
                     {result.teach_body}
                   </p>
+                  {(result.cwe_ids?.length || result.owasp_refs?.length) ? (
+                    <div className="mt-4 rounded-xl border border-stone-200/80 bg-stone-50/80 px-3 py-2.5 dark:border-stone-700/60 dark:bg-stone-900/50">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                        {t("sim.pedagogyTitle")}
+                      </p>
+                      {result.cwe_ids && result.cwe_ids.length > 0 ? (
+                        <p className="mt-1.5 font-mono text-[11px] leading-relaxed text-stone-700 dark:text-stone-300">
+                          <span className="font-semibold text-emerald-800 dark:text-emerald-400">CWE:</span>{" "}
+                          {result.cwe_ids.join(" · ")}
+                        </p>
+                      ) : null}
+                      {result.owasp_refs && result.owasp_refs.length > 0 ? (
+                        <p className="mt-1.5 text-[11px] leading-relaxed text-stone-700 dark:text-stone-300">
+                          <span className="font-semibold text-teal-800 dark:text-teal-400">OWASP / APWG:</span>{" "}
+                          {result.owasp_refs.join(" · ")}
+                        </p>
+                      ) : null}
+                      <p className="mt-2 text-[10px] text-stone-500 dark:text-stone-500">{t("sim.pedagogyFootnote")}</p>
+                    </div>
+                  ) : null}
                   {!result.is_safe && result.hint ? (
                     <p className="mt-3 rounded-xl border border-amber-200/60 bg-amber-50/50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-100">
                       <span className="font-semibold">{t("sim.hint")}:</span> {result.hint}

@@ -108,6 +108,8 @@ export const en: Record<string, string> = {
   "sim.juryLlmDisabled": "AI commentary is disabled (service not configured). Only rule-based points below.",
   "sim.juryLlmTimeout": "The AI did not respond in time — only the rule-based breakdown is shown.",
   "sim.juryLlmUnavailable": "AI is unavailable (network or server). Only rule-based points below.",
+  "sim.pedagogyTitle": "Reference tags (CWE / OWASP / APWG)",
+  "sim.pedagogyFootnote": "Lightweight mapping to our methodology; see docs/SECURITY_SOURCES.md.",
   "sim.consequences": "What could happen",
   "sim.continueDash": "Back to dashboard",
   "sim.nextRound": "Another round",

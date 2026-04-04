@@ -2,7 +2,7 @@
 
 ## Обзор
 
-Monorepo с микросервисами на **FastAPI**, фронтендом **Next.js**, **PostgreSQL** (отдельные БД на сервис), **Redis** (кэш и будущие WebSocket-сессии), единой точкой входа **API Gateway**.
+Monorepo с микросервисами на **FastAPI**, фронтендом **Vite + React**, **PostgreSQL** (отдельные БД на сервис), **Redis** (кэш и pub/sub для Live SOC), единой точкой входа **API Gateway**.
 
 ```mermaid
 flowchart LR

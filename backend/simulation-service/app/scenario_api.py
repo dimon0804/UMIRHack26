@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.scenario_narrative import (
     AGG_ACTION,
@@ -350,6 +350,85 @@ async def _scenario_for_get(
     return _scenario_by_id(sid, locale)
 
 
+def _pedagogy_tags(choice_id: str, is_safe: bool) -> tuple[list[str], list[str]]:
+    """Краткие ссылки на CWE / OWASP / APWG для разбора в UI (методология ТЗ)."""
+    cid = choice_id
+    if is_safe:
+        if cid in (
+            "report",
+            "escalate_soc",
+            "verify_sender",
+            "use_verified_encrypted",
+            "report_suspicious_ssid",
+            "official_channel",
+            "callback",
+        ):
+            return (
+                ["CWE-451"],
+                ["OWASP ASVS — authentication & reporting", "APWG — user reporting"],
+            )
+        if cid in ("delete_only",):
+            return (["CWE-1027 (risk reduced)"], ["OWASP ASVS V14 — logging & awareness"])
+        if cid.startswith("sk") and cid in (
+            "sk1_pull",
+            "sk1_other",
+            "sk2_cover",
+            "sk2_inside",
+            "sk3_staff",
+            "sk3_phone",
+            "sk3_receipt",
+            "sk4_app",
+            "sk4_sms",
+            "sk4_call",
+            "sk5_inside",
+            "sk5_credit",
+            "sk5_report",
+        ):
+            return (["Physical / payment hygiene"], ["PCI SSC — terminal best practices"])
+        if cid.startswith("ac") and cid in (
+            "ac1_it",
+            "ac2_deny",
+            "ac3_cover",
+            "ac3_ask",
+            "ac3_later",
+            "ac4_unique",
+            "ac4_2fa",
+            "ac5_callback",
+            "ac5_ticket",
+            "ac5_team",
+        ):
+            return (["Removable media / MFA boundaries"], ["OWASP ASVS — asset & session handling"])
+        return ([], [])
+
+    if cid == "open_link":
+        return (["CWE-1027", "CWE-20"], ["OWASP A07:2021", "APWG — phishing"])
+    if cid == "send_codes":
+        return (["CWE-522", "CWE-359"], ["OWASP A07:2021", "BEC / vishing"])
+    if cid == "join_open":
+        return (["CWE-300"], ["OWASP A02:2021", "Open network / MITM"])
+    if cid == "install_portal_offer":
+        return (["CWE-494", "CWE-829"], ["OWASP A08:2021", "Captive portal malware"])
+    if cid == "connect_strongest_unverified":
+        return (["CWE-693"], ["OWASP A07:2021", "Evil twin Wi‑Fi"])
+    if cid == "sk4_limit":
+        return (["CWE-1027", "CWE-20"], ["Smishing", "OWASP A07:2021", "APWG"])
+    if cid.startswith("sk"):
+        return (["CWE-504", "CWE-549"], ["Physical skimming / card data theft"])
+    if cid.startswith("ac1_") and cid != "ac1_it":
+        return (["CWE-912", "CWE-841"], ["OWASP A08:2021", "USB / unknown media"])
+    if cid in ("ac2_unlock", "ac2_unattended", "ac2_codes"):
+        return (["CWE-284", "CWE-693"], ["OWASP WSTG — social engineering", "OWASP A07:2021"])
+    if cid == "ac3_shoulder":
+        return (["CWE-549"], ["Visual disclosure / shoulder surfing"])
+    if cid == "ac4_reuse" or (cid.startswith("ac4_") and "reuse" in cid):
+        return (["CWE-521", "CWE-309"], ["OWASP A07:2021", "Credential reuse / stuffing"])
+    if cid == "ac4_ignore":
+        return (["CWE-1027", "CWE-20"], ["Breach-alert phishing", "OWASP A07:2021"])
+    if cid == "ac5_codes":
+        return (["CWE-359", "CWE-522"], ["Vishing / OTP theft", "OWASP A07:2021"])
+    return (["CWE-693"], ["OWASP Top 10 — organizational playbooks"])
+
+
 class ChoiceOutcome(BaseModel):
     choice_id: str
     is_safe: bool
@@ -361,6 +440,17 @@ class ChoiceOutcome(BaseModel):
     show_consequences: bool
     consequence_steps: list[dict[str, str]] = Field(default_factory=list)
     hint: str | None = None
+    cwe_ids: list[str] = Field(default_factory=list)
+    owasp_refs: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _fill_pedagogy(self) -> ChoiceOutcome:
+        if self.cwe_ids or self.owasp_refs:
+            return self
+        cwe, owasp = _pedagogy_tags(self.choice_id, self.is_safe)
+        self.cwe_ids = cwe
+        self.owasp_refs = owasp
+        return self
 
 
 def _outcomes_mail(locale: Locale) -> dict[str, ChoiceOutcome]:
