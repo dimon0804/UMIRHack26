@@ -22,10 +22,15 @@ docker compose up --build
 
 | Окружение | URL | Примечание |
 |-----------|-----|------------|
-| Локально | http://localhost:3000 | HTTP — норма для dev; стек: `docker compose up --build` |
-| Продакшен | *добавьте ссылку после деплоя* | Терминация **TLS 1.2+** на reverse proxy (Nginx, Traefik, Ingress); см. `docs/architecture.md` |
+| Локально | http://localhost:3000 | `docker compose up --build` или `./scripts/deploy.sh` |
+| Продакшен | https://cipherline.clv-digital.tech | TLS на reverse proxy → порт **80** контейнера `frontend` (см. `docs/DEPLOY.md`) |
 
-Для жюри/заказчика: в слайде или README достаточно одной **рабочей HTTPS-ссылки** на UI и при необходимости QR на неё.
+**Один скрипт (Linux/macOS):** из корня репозитория `chmod +x scripts/deploy.sh && ./scripts/deploy.sh`  
+**Прод:** `PRODUCTION=1 ./scripts/deploy.sh` (подключает `docker-compose.prod.yml`, CORS под домен, останавливает Adminer).
+
+**Windows:** `.\scripts\deploy.ps1` или `$env:PRODUCTION='1'; .\scripts\deploy.ps1`
+
+Подробно: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Структура репозитория
 

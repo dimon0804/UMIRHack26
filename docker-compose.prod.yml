@@ -1,0 +1,19 @@
+# Продакшен-оверрайд: подключайте вместе с основным файлом.
+#
+# Linux / macOS:
+#   export COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+# Windows PowerShell:
+#   $env:COMPOSE_FILE = "docker-compose.yml;docker-compose.prod.yml"
+#
+# Либо используйте scripts/deploy.sh / deploy.ps1 с флагом production.
+
+services:
+  gateway:
+    environment:
+      # HTTPS-ориджин UI; при необходимости добавьте www и staging через .env GATEWAY_CORS_ORIGINS
+      GATEWAY_CORS_ORIGINS: ${GATEWAY_CORS_ORIGINS:-https://cipherline.clv-digital.tech}
+
+  # Внешний reverse proxy обычно шлёт трафик на порт 80 контейнера frontend.
+  frontend:
+    ports:
+      - "${FRONTEND_PUBLISH:-80}:80"
