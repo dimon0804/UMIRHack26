@@ -40,9 +40,33 @@ $env:PRODUCTION = "1"
 .\scripts\deploy.ps1
 ```
 
-## TLS и reverse proxy
+## Автоматический SSL (рекомендуется на ВМ)
 
-На хосте перед контейнером поднимите **Nginx**, **Traefik** или **Caddy**:
+Сертификат **сам по себе внутри контейнеров не появляется** — нужен ACME (Let's Encrypt). В репозитории есть **Caddy** в `docker-compose.caddy.yml`: он слушает **80/443**, получает сертификат и проксирует на контейнер `frontend`.
+
+```bash
+# DNS: A-запись cipherline.clv-digital.tech → публичный IP этой машины (проверьте: dig +short)
+# Фаервол: разрешить вход 80, 443 с интернета
+
+cd ~/UMIRHack26
+git pull
+PRODUCTION=1 ENABLE_TLS=1 ./scripts/deploy.sh
+# В .env задайте реальный ACME_EMAIL=ваш@email (для Let's Encrypt)
+```
+
+После успешного выпуска сертификата сайт открывается по **https://cipherline.clv-digital.tech**.
+
+Если «по IP открывается, по домену нет»:
+
+1. **DNS** — `dig cipherline.clv-digital.tech` должен возвращать **тот же IP**, что у сервера (`curl -4 ifconfig.me` на ВМ).
+2. **Порты** — с вашего ПК: `curl -I http://cipherline.clv-digital.tech` (должен ответить Caddy или редирект на HTTPS).
+3. Без записи DNS в Let's Encrypt **нельзя** выдать валидный сертификат на чужой домен.
+
+---
+
+## TLS вручную (Nginx / Traefik)
+
+На хосте перед контейнером поднимите **Nginx**, **Traefik** или **Caddy** вручную:
 
 - Проксируйте `https://cipherline.clv-digital.tech` → `http://127.0.0.1:80` (при `PRODUCTION=1` frontend слушает **80** в `docker-compose.prod.yml`).
 - Передайте заголовки:

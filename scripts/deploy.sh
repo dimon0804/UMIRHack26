@@ -121,8 +121,17 @@ ensure_docker_and_compose
 export COMPOSE_FILE="docker-compose.yml"
 if [[ "${PRODUCTION:-0}" == "1" ]]; then
   export COMPOSE_FILE="docker-compose.yml:docker-compose.prod.yml"
-  log "Режим PRODUCTION (COMPOSE_FILE=$COMPOSE_FILE)"
+  log "Режим PRODUCTION (CORS под HTTPS-домен)"
 fi
+# Авто-HTTPS (Let's Encrypt): Caddy слушает 80/443, сертификат выдаётся сам, если DNS A/AAAA домена → этот сервер
+if [[ "${ENABLE_TLS:-0}" == "1" ]]; then
+  export COMPOSE_FILE="${COMPOSE_FILE}:docker-compose.caddy.yml"
+  log "ENABLE_TLS=1: Caddy — автоматический SSL для ${CADDY_DOMAIN:-cipherline.clv-digital.tech} (см. docs/DEPLOY.md про DNS)"
+  if [[ "${PRODUCTION:-0}" != "1" ]]; then
+    log "Подсказка: для CORS в проде добавьте PRODUCTION=1"
+  fi
+fi
+log "COMPOSE_FILE=$COMPOSE_FILE"
 
 if [[ ! -f .env ]]; then
   if [[ -f .env.example ]]; then
@@ -148,6 +157,11 @@ log "Статус:"
 "${DC[@]}" ps
 
 echo ""
-echo "Готово. UI: http://localhost:${FRONTEND_PORT:-3000} (в PRODUCTION часто порт 80 → см. docker-compose.prod.yml)."
-echo "Gateway: http://localhost:${GATEWAY_PORT:-8000}/docs"
-echo "Домен: https://cipherline.clv-digital.tech — TLS на reverse proxy (docs/DEPLOY.md)."
+if [[ "${ENABLE_TLS:-0}" == "1" ]]; then
+  echo "Готово. Откройте в браузере: https://${CADDY_DOMAIN:-cipherline.clv-digital.tech}"
+  echo "(HTTP снаружи редиректит на HTTPS; сертификат Let's Encrypt — после корректного DNS на этот сервер.)"
+else
+  echo "Готово. UI: http://localhost:${FRONTEND_PORT:-3000} (PRODUCTION без TLS: порт 80 см. docker-compose.prod.yml)."
+fi
+echo "Gateway (прямой доступ к API): http://localhost:${GATEWAY_PORT:-8000}/docs"
+echo "Авто-SSL: ENABLE_TLS=1 ./scripts/deploy.sh — см. docs/DEPLOY.md"

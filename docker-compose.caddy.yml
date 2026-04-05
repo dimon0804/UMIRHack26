@@ -1,0 +1,32 @@
+# Caddy: публичные 80/443 → HTTPS → контейнер frontend (nginx).
+# Подключение: вместе с основным compose, обычно с prod:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:docker-compose.caddy.yml
+#
+# У frontend убираем публикацию портов на хост — наружу только Caddy (иначе конфликт :80).
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:-cipherline.clv-digital.tech}
+      # Для Let's Encrypt (обязательно реальный email в проде)
+      ACME_EMAIL: ${ACME_EMAIL:-ssl@cipherline.clv-digital.tech}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    networks:
+      - internal
+
+  frontend:
+    ports: []
+
+volumes:
+  caddy_data:
+  caddy_config:

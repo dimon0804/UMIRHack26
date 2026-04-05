@@ -26,7 +26,7 @@ docker compose up --build
 | Продакшен | https://cipherline.clv-digital.tech | TLS на reverse proxy → порт **80** контейнера `frontend` (см. `docs/DEPLOY.md`) |
 
 **Один скрипт (Linux):** из корня `chmod +x scripts/deploy.sh && ./scripts/deploy.sh` — если Docker не установлен, скрипт **сам установит** Engine + Compose (запуск от **root** или `sudo ./scripts/deploy.sh`).  
-**Прод:** `sudo PRODUCTION=1 ./scripts/deploy.sh` (или от root). Отключить автоустановку Docker: `SKIP_DOCKER_INSTALL=1 ./scripts/deploy.sh`.
+**Прод:** `sudo PRODUCTION=1 ./scripts/deploy.sh` (или от root). **HTTPS (Let's Encrypt):** `sudo PRODUCTION=1 ENABLE_TLS=1 ./scripts/deploy.sh` — поднимается **Caddy**, SSL выдаётся автоматически, если **DNS** домена указывает на сервер (см. `docs/DEPLOY.md`). Отключить автоустановку Docker: `SKIP_DOCKER_INSTALL=1 ./scripts/deploy.sh`.
 
 **Windows:** `.\scripts\deploy.ps1` или `$env:PRODUCTION='1'; .\scripts\deploy.ps1`
 

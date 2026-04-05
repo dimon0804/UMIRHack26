@@ -21,12 +21,11 @@ if (-not $useCompose) {
     Write-Error "Нужен 'docker compose'."
 }
 
-if ($env:PRODUCTION -eq "1") {
-    $env:COMPOSE_FILE = "docker-compose.yml;docker-compose.prod.yml"
-    Write-Host "[deploy] PRODUCTION: COMPOSE_FILE=$($env:COMPOSE_FILE)"
-} else {
-    $env:COMPOSE_FILE = "docker-compose.yml"
-}
+$cf = "docker-compose.yml"
+if ($env:PRODUCTION -eq "1") { $cf = "$cf;docker-compose.prod.yml" }
+if ($env:ENABLE_TLS -eq "1") { $cf = "$cf;docker-compose.caddy.yml" }
+$env:COMPOSE_FILE = $cf
+Write-Host "[deploy] COMPOSE_FILE=$cf"
 
 if (-not (Test-Path .env)) {
     if (Test-Path .env.example) {

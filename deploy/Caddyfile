@@ -1,0 +1,11 @@
+# Caddy: автоматический HTTPS (Let's Encrypt), если DNS домена указывает на этот сервер
+# Переменные подставляются из окружения контейнера (см. docker-compose.caddy.yml).
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$CADDY_DOMAIN} {
+	encode gzip
+	reverse_proxy frontend:80
+}
