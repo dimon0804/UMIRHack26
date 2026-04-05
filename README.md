@@ -25,8 +25,8 @@ docker compose up --build
 | Локально | http://localhost:3000 | `docker compose up --build` или `./scripts/deploy.sh` |
 | Продакшен | https://cipherline.clv-digital.tech | TLS на reverse proxy → порт **80** контейнера `frontend` (см. `docs/DEPLOY.md`) |
 
-**Один скрипт (Linux/macOS):** из корня репозитория `chmod +x scripts/deploy.sh && ./scripts/deploy.sh`  
-**Прод:** `PRODUCTION=1 ./scripts/deploy.sh` (подключает `docker-compose.prod.yml`, CORS под домен, останавливает Adminer).
+**Один скрипт (Linux):** из корня `chmod +x scripts/deploy.sh && ./scripts/deploy.sh` — если Docker не установлен, скрипт **сам установит** Engine + Compose (запуск от **root** или `sudo ./scripts/deploy.sh`).  
+**Прод:** `sudo PRODUCTION=1 ./scripts/deploy.sh` (или от root). Отключить автоустановку Docker: `SKIP_DOCKER_INSTALL=1 ./scripts/deploy.sh`.
 
 **Windows:** `.\scripts\deploy.ps1` или `$env:PRODUCTION='1'; .\scripts\deploy.ps1`
 
