@@ -62,13 +62,27 @@ PRODUCTION=1 ENABLE_TLS=1 ./scripts/deploy.sh
 2. **Порты** — с вашего ПК: `curl -I http://cipherline.clv-digital.tech` (должен ответить Caddy или редирект на HTTPS).
 3. Без записи DNS в Let's Encrypt **нельзя** выдать валидный сертификат на чужой домен.
 
+### «Bind for 0.0.0.0:80 failed: port is already allocated»
+
+Раньше `docker-compose.prod.yml` публиковал **frontend** на **:80**, и **Caddy** тоже требует **:80** — два контейнера не могут занять один порт. В актуальном `docker-compose.prod.yml` публикация **frontend на 80 убрана**; с **ENABLE_TLS=1** наружу только **Caddy** (80/443), `frontend` только во внутренней сети.
+
+На сервере после `git pull`:
+
+```bash
+cd ~/UMIRHack26
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.caddy.yml down
+# при необходимости освободить 80 на хосте (nginx/apache):
+# sudo systemctl stop nginx 2>/dev/null; sudo systemctl stop apache2 2>/dev/null
+PRODUCTION=1 ENABLE_TLS=1 ./scripts/deploy.sh
+```
+
 ---
 
 ## TLS вручную (Nginx / Traefik)
 
 На хосте перед контейнером поднимите **Nginx**, **Traefik** или **Caddy** вручную:
 
-- Проксируйте `https://cipherline.clv-digital.tech` → `http://127.0.0.1:80` (при `PRODUCTION=1` frontend слушает **80** в `docker-compose.prod.yml`).
+- Проксируйте `https://cipherline.clv-digital.tech` → `http://127.0.0.1:3000` (UI без TLS по умолчанию на порту **3000**) или → **Caddy** на **80**, если используете встроенный `ENABLE_TLS=1`.
 - Передайте заголовки:
 
   - `Host`
